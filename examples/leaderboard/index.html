@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wavelet Leaderboard Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #0a0a0a; color: #e5e5e5; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .subtitle { color: #737373; margin-bottom: 2rem; font-size: 0.875rem; }
+    .controls { margin-bottom: 2rem; display: flex; gap: 0.5rem; }
+    button { background: #262626; border: 1px solid #404040; color: #e5e5e5; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-size: 0.875rem; }
+    button:hover { background: #404040; }
+    .status { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; margin-bottom: 1rem; }
+    .status.connected { background: #052e16; color: #4ade80; }
+    .status.disconnected { background: #450a0a; color: #f87171; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; }
+    .connected .dot { background: #4ade80; }
+    .disconnected .dot { background: #f87171; }
+    table { width: 100%; max-width: 600px; border-collapse: collapse; }
+    th { text-align: left; padding: 0.75rem; border-bottom: 1px solid #262626; color: #737373; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 0.75rem; border-bottom: 1px solid #1a1a1a; font-variant-numeric: tabular-nums; }
+    .rank { color: #737373; width: 3rem; }
+    .score { font-weight: 600; }
+    .flash { animation: flash 0.5s ease-out; }
+    @keyframes flash { from { background: #1e3a2f; } to { background: transparent; } }
+    #log { margin-top: 2rem; padding: 1rem; background: #111; border-radius: 8px; font-family: 'SF Mono', monospace; font-size: 0.75rem; color: #737373; max-height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h1>Leaderboard</h1>
+  <p class="subtitle">Powered by Wavelet — subscribe to computed results, not raw rows.</p>
+
+  <div class="status disconnected" id="status">
+    <span class="dot"></span>
+    <span id="status-text">Connecting...</span>
+  </div>
+
+  <div class="controls">
+    <button onclick="addRandomScore()">Add Random Score</button>
+    <button onclick="addBatchScores()">Add 10 Scores</button>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th class="rank">#</th><th>Player</th><th>Score</th><th>Games</th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <div id="log"></div>
+
+  <script>
+    const API = 'http://localhost:8080'
+    const WS = 'ws://localhost:8080'
+    let leaderboard = []
+
+    function log(msg) {
+      const el = document.getElementById('log')
+      const time = new Date().toLocaleTimeString()
+      el.textContent = `[${time}] ${msg}\n` + el.textContent
+    }
+
+    function render() {
+      const tbody = document.getElementById('tbody')
+      tbody.innerHTML = leaderboard
+        .sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
+        .map((row, i) => `
+          <tr>
+            <td class="rank">${i + 1}</td>
+            <td>${row.player_id}</td>
+            <td class="score">${row.total_score ?? 0}</td>
+            <td>${row.games_played ?? 0}</td>
+          </tr>
+        `).join('')
+    }
+
+    function setStatus(connected) {
+      const el = document.getElementById('status')
+      const text = document.getElementById('status-text')
+      el.className = `status ${connected ? 'connected' : 'disconnected'}`
+      text.textContent = connected ? 'Connected' : 'Disconnected'
+    }
+
+    // Fetch initial data
+    fetch(`${API}/v1/views/leaderboard`)
+      .then(r => r.json())
+      .then(d => { leaderboard = d.rows || []; render() })
+      .catch(e => log(`Fetch error: ${e.message}`))
+
+    // WebSocket subscription
+    function connect() {
+      const ws = new WebSocket(`${WS}/subscribe/leaderboard`)
+
+      ws.onopen = () => {
+        setStatus(true)
+        log('WebSocket connected')
+      }
+
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data)
+        if (msg.type === 'diff') {
+          log(`Diff: +${msg.inserted.length} ~${msg.updated.length} -${msg.deleted.length}`)
+
+          // Apply diff
+          for (const row of msg.deleted) {
+            leaderboard = leaderboard.filter(r => r.player_id !== row.player_id)
+          }
+          for (const row of msg.inserted) {
+            const idx = leaderboard.findIndex(r => r.player_id === row.player_id)
+            if (idx >= 0) leaderboard[idx] = row
+            else leaderboard.push(row)
+          }
+          for (const row of msg.updated) {
+            const idx = leaderboard.findIndex(r => r.player_id === row.player_id)
+            if (idx >= 0) leaderboard[idx] = row
+            else leaderboard.push(row)
+          }
+
+          render()
+        }
+      }
+
+      ws.onclose = () => {
+        setStatus(false)
+        log('Disconnected. Reconnecting in 2s...')
+        setTimeout(connect, 2000)
+      }
+    }
+    connect()
+
+    // Write helpers
+    const players = ['alice', 'bob', 'charlie', 'dave', 'eve', 'frank', 'grace', 'heidi']
+
+    async function addRandomScore() {
+      const player = players[Math.floor(Math.random() * players.length)]
+      const score = Math.floor(Math.random() * 100) + 1
+
+      const res = await fetch(`${API}/v1/streams/game_events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: player, score, event_type: 'game' })
+      })
+
+      if (res.ok) log(`Sent: ${player} +${score}`)
+      else log(`Error: ${(await res.json()).error}`)
+    }
+
+    async function addBatchScores() {
+      const events = Array.from({ length: 10 }, () => ({
+        player_id: players[Math.floor(Math.random() * players.length)],
+        score: Math.floor(Math.random() * 100) + 1,
+        event_type: 'game'
+      }))
+
+      const res = await fetch(`${API}/v1/streams/game_events/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(events)
+      })
+
+      if (res.ok) log(`Sent batch of 10 scores`)
+      else log(`Error: ${(await res.json()).error}`)
+    }
+  </script>
+</body>
+</html>

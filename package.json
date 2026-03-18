@@ -1,0 +1,18 @@
+{
+  "name": "wavelet-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace=packages/server",
+    "test": "npm test --workspaces --if-present",
+    "lint": "eslint packages/ --ext .ts",
+    "typecheck": "tsc --build packages/*/tsconfig.json"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

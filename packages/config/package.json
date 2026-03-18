@@ -1,0 +1,24 @@
+{
+  "name": "wavelet",
+  "version": "0.1.0",
+  "description": "Subscribe to computed results, not raw rows",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["wavelet", "realtime", "risingwave", "websocket", "streaming"],
+  "license": "Apache-2.0"
+}

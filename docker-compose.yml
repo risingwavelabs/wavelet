@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  risingwave:
+    image: risingwavelabs/risingwave:latest
+    command: playground
+    ports:
+      - "4566:4566"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "4566"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  wavelet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      WAVELET_DATABASE_URL: postgres://root@risingwave:4566/dev
+    depends_on:
+      risingwave:
+        condition: service_healthy
