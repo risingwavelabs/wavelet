@@ -8,7 +8,7 @@ Built on [RisingWave](https://github.com/risingwavelabs/risingwave), an incremen
 
 ## Why Wavelet
 
-ClickHouse helps you compute fast. Supabase tells you data changed. **Wavelet tells you your computed result changed** — and delivers it to your app.
+Most databases tell you **data changed**. Wavelet tells you **your computed result changed** — and delivers it to your app.
 
 - **No polling** — results push to your app within 500ms of source data changes
 - **Pre-computed** — 1 client or 10,000, query cost is the same
