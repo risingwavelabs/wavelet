@@ -2,18 +2,18 @@
 
 **Subscribe to computed results, not raw rows.**
 
-Wavelet is a real-time backend that pushes pre-computed query results to your app over WebSocket. Define a SQL view, subscribe from your frontend — Wavelet keeps it up to date automatically.
+Wavelet is a real-time backend that pushes pre-computed query results to your app over WebSocket. Define a SQL view, subscribe from your frontend - Wavelet keeps it up to date automatically.
 
 Built on [RisingWave](https://github.com/risingwavelabs/risingwave), an incremental computation engine. By the RisingWave team.
 
 ## Why Wavelet
 
-Most databases tell you **data changed**. Wavelet tells you **your computed result changed** — and delivers it to your app.
+Most databases tell you **data changed**. Wavelet tells you **your computed result changed** - and delivers it to your app.
 
-- **No polling** — results push to your app within 500ms of source data changes
-- **Pre-computed** — 1 client or 10,000, query cost is the same
-- **Typed** — codegen gives your IDE and AI agent full autocomplete
-- **Filtered** — JWT-based per-tenant filtering, enforced server-side
+- **No polling** - results push to your app within 500ms of source data changes
+- **Pre-computed** - 1 client or 10,000, query cost is the same
+- **Typed** - codegen gives your IDE and AI agent full autocomplete
+- **Filtered** - JWT-based per-tenant filtering, enforced server-side
 
 ## Quick Start
 
@@ -68,7 +68,7 @@ import { useWavelet } from './.wavelet/client'
 function Leaderboard() {
   const { data, isLoading } = useWavelet('leaderboard')
   // data: { player_id: string, total_score: number, games_played: number }[]
-  // Updates automatically via WebSocket — no polling, no refetching
+  // Updates automatically via WebSocket - no polling, no refetching
 
   if (isLoading) return <div>Loading...</div>
 
@@ -95,7 +95,7 @@ await wavelet.streams.game_events.emit({
 ## How It Works
 
 ```
-Your App ←— WebSocket —— Wavelet Server —— SQL cursor —— RisingWave
+Your App <-- WebSocket -- Wavelet Server -- SQL cursor -- RisingWave
                               ↑                              ↑
                          JWT filter                   Incremental MV
                          + fanout                     computation
@@ -126,7 +126,7 @@ views: {
 }
 ```
 
-A client with `{ tenant_id: "t1" }` in their JWT only receives diffs for `t1`. Enforced server-side — the client cannot override it.
+A client with `{ tenant_id: "t1" }` in their JWT only receives diffs for `t1`. Enforced server-side - the client cannot override it.
 
 ## CLI
 
@@ -177,4 +177,4 @@ wavelet/
 
 ## License
 
-Apache 2.0 — see [LICENSE](./LICENSE).
+Apache 2.0 - see [LICENSE](./LICENSE).

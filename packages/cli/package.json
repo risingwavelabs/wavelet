@@ -1,7 +1,7 @@
 {
   "name": "@wavelet/cli",
   "version": "0.1.0",
-  "description": "Wavelet CLI — manage views, generate types, run dev server",
+  "description": "Wavelet CLI - manage views, generate types, run dev server",
   "bin": {
     "wavelet": "./dist/index.js"
   },

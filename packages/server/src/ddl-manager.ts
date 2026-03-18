@@ -59,10 +59,10 @@ export class DdlManager {
   /**
    * Sync all streams, views, and subscriptions to match the config.
    * Returns a list of actions taken.
-   * Idempotent — safe to call multiple times.
+   * Idempotent - safe to call multiple times.
    */
   async sync(config: WaveletConfig): Promise<DdlAction[]> {
-    if (!this.client) throw new Error('Not connected — call connect() first')
+    if (!this.client) throw new Error('Not connected - call connect() first')
 
     const actions: DdlAction[] = []
 
@@ -78,7 +78,7 @@ export class DdlManager {
     const desiredStreamNames = new Set(Object.keys(desiredStreams))
     const desiredViewNames = new Set(Object.keys(desiredViews))
 
-    // 3. Sync streams — create missing tables
+    // 3. Sync streams - create missing tables
     for (const [streamName, streamDef] of Object.entries(desiredStreams)) {
       if (existingTables.has(streamName)) {
         actions.push({ type: 'unchanged', resource: 'stream', name: streamName })
@@ -88,21 +88,21 @@ export class DdlManager {
       }
     }
 
-    // 4. Sync views — create, update, or leave unchanged
+    // 4. Sync views - create, update, or leave unchanged
     for (const [viewName, viewDef] of Object.entries(desiredViews)) {
       const subName = `wavelet_sub_${viewName}`
       const desiredSql = getViewQuery(viewDef)
       const existingSql = existingViews.get(viewName)
 
       if (existingSql === undefined) {
-        // View does not exist — create MV and subscription
+        // View does not exist - create MV and subscription
         await this.createMaterializedView(viewName, desiredSql)
         actions.push({ type: 'create', resource: 'view', name: viewName })
 
         await this.createSubscription(subName, viewName)
         actions.push({ type: 'create', resource: 'subscription', name: subName })
       } else if (normalizeSql(existingSql) !== normalizeSql(desiredSql)) {
-        // View SQL changed — drop subscription, drop MV, recreate
+        // View SQL changed - drop subscription, drop MV, recreate
         if (existingSubscriptions.has(subName)) {
           await this.dropSubscription(subName)
           actions.push({ type: 'delete', resource: 'subscription', name: subName, detail: 'dropped for view update' })
@@ -167,7 +167,7 @@ export class DdlManager {
         // Only drop if no MV depends on it
         const hasDependents = await this.tableHasDependentViews(existingTableName)
         if (hasDependents) {
-          console.log(`[ddl-manager] Skipping drop of table "${existingTableName}" — materialized views depend on it`)
+          console.log(`[ddl-manager] Skipping drop of table "${existingTableName}" - materialized views depend on it`)
           actions.push({
             type: 'unchanged',
             resource: 'stream',

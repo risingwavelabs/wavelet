@@ -55,13 +55,13 @@ export class HttpApi {
         return
       }
 
-      // GET /v1/views — list available views
+      // GET /v1/views - list available views
       if (url.pathname === '/v1/views' && req.method === 'GET') {
         this.json(res, 200, { views: Object.keys(this.views) })
         return
       }
 
-      // GET /v1/streams — list available streams
+      // GET /v1/streams - list available streams
       if (url.pathname === '/v1/streams' && req.method === 'GET') {
         this.json(res, 200, { streams: Object.keys(this.streams) })
         return

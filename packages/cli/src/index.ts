@@ -3,7 +3,7 @@
 const command = process.argv[2]
 
 const HELP = `
-wavelet — Subscribe to computed results, not raw rows.
+wavelet - Subscribe to computed results, not raw rows.
 
 Usage:
   wavelet <command> [options]
@@ -202,9 +202,9 @@ function printDdlActions(actions: { type: string; resource: string; name: string
     if (action.type === 'unchanged') {
       console.log(`  ${icon} ${label}`)
     } else if (action.type === 'create') {
-      console.log(`  ${icon} ${label} — created${detail}`)
+      console.log(`  ${icon} ${label} - created${detail}`)
     } else if (action.type === 'delete') {
-      console.log(`  ${icon} ${label} — removed${detail}`)
+      console.log(`  ${icon} ${label} - removed${detail}`)
     }
   }
 
