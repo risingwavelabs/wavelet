@@ -100,6 +100,84 @@ The issue should include:
 
 This is the standard workflow - Wavelet is a first-party project in the RisingWave ecosystem and can request upstream changes.
 
+## Wavelet Cloud Integration
+
+The closed-source **wavelet-cloud** project (`risingwavelabs/wavelet-cloud`)
+uses this codebase as a library. It imports `WaveletServer` and `DdlManager`
+to run a managed multi-tenant service. Changes to the interfaces below will
+break wavelet-cloud.
+
+### Stable interfaces (do not change without filing an issue on wavelet-cloud)
+
+| Import | Used for |
+|--------|----------|
+| `WaveletServer` from `@risingwave/wavelet-server` | Create per-project server instances |
+| `WaveletServer.attachTo(server, { pathPrefix })` | Attach to shared HTTP server with path prefix like `/p/{projectId}` |
+| `WaveletServer.stop()` | Clean shutdown |
+| `DdlManager` from `@risingwave/wavelet-server` | `connect()` → `sync(config)` → `close()` per-user DDL sync |
+| `DdlAction` type from `@risingwave/wavelet-server` | Track DDL changes |
+| `WaveletConfig` type from `@risingwave/wavelet` | Config serialization between CLI and cloud API |
+
+### What wavelet-cloud does with these
+
+1. User runs `wavelet-cloud deploy` with a `wavelet.config.ts`
+2. Cloud creates a RisingWave database per user
+3. Cloud calls `DdlManager.sync(config)` against that database
+4. Cloud calls `WaveletServer.attachTo(sharedHttpServer, { pathPrefix: '/p/{projectId}' })`
+5. End users access `https://wavelet-cloud.fly.dev/p/{projectId}/v1/...` and `/subscribe/...`
+
+### If you need to change a stable interface
+
+1. File an issue at https://github.com/risingwavelabs/wavelet-cloud/issues
+2. Describe what changes and why
+3. Coordinate before merging
+
+### Package names
+
+wavelet-cloud's `vendor/` directory pins specific builds of:
+- `@risingwave/wavelet` (config types)
+- `@risingwave/wavelet-server` (server + DDL manager)
+
+If you rename packages again, wavelet-cloud's imports and vendor will break.
+
+## Agent Communication (Stream0)
+
+This agent uses Stream0 for cross-repo coordination with wavelet-cloud-agent.
+
+- **Stream0 URL**: `http://3.94.39.251:8080`
+- **Agent ID**: `wavelet-agent`
+- **Peer**: `wavelet-cloud-agent`
+- **Task ID for sync**: `cross-repo-sync`
+
+### At session start
+
+Check inbox for messages from wavelet-cloud-agent:
+
+```bash
+curl -s "http://3.94.39.251:8080/agents/wavelet-agent/inbox?status=unread" \
+  -H "X-API-Key: $STREAM0_API_KEY"
+```
+
+Acknowledge processed messages:
+
+```bash
+curl -s -X POST "http://3.94.39.251:8080/inbox/messages/{id}/ack" \
+  -H "X-API-Key: $STREAM0_API_KEY"
+```
+
+### When making breaking changes
+
+Send a notification to wavelet-cloud-agent:
+
+```bash
+curl -s -X POST "http://3.94.39.251:8080/agents/wavelet-cloud-agent/inbox" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $STREAM0_API_KEY" \
+  -d '{"task_id":"cross-repo-sync","from":"wavelet-agent","type":"request","content":{"change":"description of what changed"}}'
+```
+
+The API key is stored in the environment variable `STREAM0_API_KEY`. Do not hardcode it.
+
 ## Testing
 
 Framework: Vitest. Run with `npm test` or `npx vitest run`.
