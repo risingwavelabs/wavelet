@@ -102,10 +102,14 @@ export default defineConfig({
 
 async function runDev() {
   const { loadConfig } = await import('./config-loader.js')
+  const { ensureRisingWave } = await import('./risingwave-launcher.js')
   const configPath = getConfigPath()
 
   console.log(`Loading config from ${configPath}...`)
   const config = await loadConfig(configPath)
+
+  // Ensure RisingWave is running
+  const rwProcess = await ensureRisingWave(config.database)
 
   // Sync DDL before starting server
   const { DdlManager, WaveletServer } = await import('@wavelet/server')
@@ -124,6 +128,10 @@ async function runDev() {
   const shutdown = async () => {
     console.log('\nShutting down...')
     await server.stop()
+    if (rwProcess) {
+      console.log('Stopping RisingWave...')
+      rwProcess.kill()
+    }
     process.exit(0)
   }
   process.on('SIGINT', shutdown)
