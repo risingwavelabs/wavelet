@@ -50,6 +50,20 @@ Build order matters: **config -> server/sdk -> cli** (cli depends on server and 
 - **Idempotent operations**: All CLI commands and DDL operations are safe to run multiple times.
 - **Stateless server**: No local SQLite, no state files.
 
+## Documentation Requirements
+
+Every major change must have a corresponding spec or design document in `docs/specs/`. This includes:
+
+- New features
+- Major refactors
+- Architectural changes
+- API changes (breaking or significant additions)
+- New integrations
+
+Each spec should include: motivation, design overview, key decisions, and any trade-offs. File naming: `YYYY-MM-DD-short-description.md` (e.g. `2026-03-17-ddl-manager.md`).
+
+This is mandatory, not optional. Code without documentation for significant changes should not be considered complete.
+
 ## Coding Conventions
 
 - TypeScript strict mode, ES2022 target, NodeNext module resolution.
