@@ -160,6 +160,35 @@ POST /v1/streams/{name}/batch    → write batch of events
 WS   /subscribe/{name}           → real-time diffs
 ```
 
+## MCP Server (AI Agent Integration)
+
+Wavelet includes an MCP (Model Context Protocol) server that lets AI agents query views and emit events directly.
+
+```json
+{
+  "mcpServers": {
+    "wavelet": {
+      "command": "npx",
+      "args": ["@wavelet/mcp"],
+      "env": {
+        "WAVELET_DATABASE_URL": "postgres://root@localhost:4566/dev"
+      }
+    }
+  }
+}
+```
+
+Available tools:
+
+| Tool | Description |
+|---|---|
+| `list_views` | List all materialized views with their schemas |
+| `query_view` | Query a view with optional filters |
+| `list_streams` | List all event streams |
+| `emit_event` | Write a single event to a stream |
+| `emit_batch` | Write multiple events to a stream |
+| `run_sql` | Execute a read-only SQL query |
+
 ## Project Structure
 
 ```
@@ -168,9 +197,11 @@ wavelet/
 │   ├── config/    # defineConfig, sql tag, types (published as `wavelet`)
 │   ├── server/    # WebSocket fanout + cursor polling + JWT + HTTP API
 │   ├── sdk/       # TypeScript client + React hooks
-│   └── cli/       # CLI tools (init, generate, dev, push)
+│   ├── cli/       # CLI tools (init, generate, dev, push)
+│   └── mcp/       # MCP server for AI agent integration
 ├── examples/
-│   └── leaderboard/
+│   ├── leaderboard/
+│   └── ai-agent-monitor/
 ├── docker-compose.yml
 └── wavelet.config.ts
 ```

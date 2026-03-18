@@ -12,8 +12,9 @@ Monorepo using npm workspaces (`packages/*`, `examples/*`). Node >= 20.
 | `packages/server` | `@wavelet/server` | WebSocket fanout, subscription cursor polling, JWT auth, HTTP API |
 | `packages/sdk` | `@wavelet/sdk` | TypeScript client + React hooks (`@wavelet/sdk/react`) |
 | `packages/cli` | `@wavelet/cli` | CLI binary (`wavelet push`, `wavelet dev`, codegen) |
+| `packages/mcp` | `@wavelet/mcp` | MCP server - exposes views and streams as AI agent tools |
 
-Dependency graph: `config` is the leaf. `server` and `sdk` depend on `config`. `cli` depends on `server` and `config`.
+Dependency graph: `config` is the leaf. `server` and `sdk` depend on `config`. `cli` depends on `server` and `config`. `mcp` depends on `config` and `pg`.
 
 ## Build & Development
 
@@ -101,4 +102,16 @@ This is the standard workflow - Wavelet is a first-party project in the RisingWa
 
 ## Testing
 
-Not yet set up. Tests needed for: DDL manager, cursor parsing, JWT filtering, HTTP routes.
+Framework: Vitest. Run with `npm test` or `npx vitest run`.
+
+```bash
+npm test          # run all tests
+npx vitest        # watch mode
+npx vitest run    # single run
+```
+
+Existing tests (in `packages/*/src/__tests__/`):
+- `config`: sql template tag, defineConfig
+- `server`: cursor diff parsing, JWT verification, HTTP API routes
+
+Tests that require a running RisingWave (DDL manager, end-to-end WebSocket) are not yet automated.
