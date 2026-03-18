@@ -88,6 +88,17 @@ CLOSE cursor_name;
 -- op=1: insert, op=2: delete, op=3: update (old value), op=4: update (new value)
 ```
 
+## Upstream RisingWave Changes
+
+Wavelet depends on RisingWave as its compute backend. When Wavelet needs a feature, bug fix, or behavior change in RisingWave that does not exist yet, file an issue directly at https://github.com/risingwavelabs/risingwave.
+
+The issue should include:
+- What Wavelet needs and why
+- The specific RisingWave behavior that is missing or insufficient
+- Suggested approach if known
+
+This is the standard workflow - Wavelet is a first-party project in the RisingWave ecosystem and can request upstream changes.
+
 ## Testing
 
 Not yet set up. Tests needed for: DDL manager, cursor parsing, JWT filtering, HTTP routes.
