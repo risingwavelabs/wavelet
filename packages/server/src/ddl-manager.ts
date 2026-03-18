@@ -20,7 +20,10 @@ const COLUMN_TYPE_MAP: Record<string, string> = {
 }
 
 function normalizeSql(sql: string): string {
-  return sql.replace(/\s+/g, ' ').trim().toLowerCase()
+  // RisingWave stores definitions as "CREATE MATERIALIZED VIEW name AS SELECT ..."
+  // Strip the prefix to compare just the query part
+  const stripped = sql.replace(/^create\s+materialized\s+view\s+\S+\s+as\s+/i, '')
+  return stripped.replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
 function getViewQuery(viewDef: ViewDef | SqlFragment): string {
@@ -195,7 +198,7 @@ export class DdlManager {
 
   private async getExistingViews(): Promise<Map<string, string>> {
     const result = await this.client!.query(
-      `SELECT name, definition FROM rw_catalog.rw_materialized_views WHERE schema_name = 'public'`
+      `SELECT name, definition FROM rw_catalog.rw_materialized_views WHERE schema_id = (SELECT id FROM rw_catalog.rw_schemas WHERE name = 'public')`
     )
     const views = new Map<string, string>()
     for (const row of result.rows) {
@@ -206,7 +209,7 @@ export class DdlManager {
 
   private async getExistingSubscriptions(): Promise<Set<string>> {
     const result = await this.client!.query(
-      `SELECT name FROM rw_catalog.rw_subscriptions WHERE schema_name = 'public'`
+      `SELECT name FROM rw_catalog.rw_subscriptions WHERE schema_id = (SELECT id FROM rw_catalog.rw_schemas WHERE name = 'public')`
     )
     return new Set(result.rows.map((r: any) => r.name))
   }

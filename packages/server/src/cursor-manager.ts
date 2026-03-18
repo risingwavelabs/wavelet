@@ -44,7 +44,7 @@ export class CursorManager {
         )
         console.log(`Created subscription: ${subName}`)
       } catch (err: any) {
-        if (err.message?.includes('already exists')) {
+        if (err.message?.includes('exists')) {
           console.log(`Subscription exists: ${subName}`)
         } else {
           throw err
@@ -52,9 +52,8 @@ export class CursorManager {
       }
 
       this.subscriptions.set(viewName, subName)
-      // Initialize cursor to "now"
-      const result = await this.client.query(`SELECT now()::text AS ts`)
-      this.cursors.set(viewName, result.rows[0].ts)
+      // Initialize cursor to now (epoch milliseconds)
+      this.cursors.set(viewName, String(Date.now()))
     }
   }
 
@@ -103,10 +102,12 @@ export class CursorManager {
 
       const diff = this.parseDiffs(result.rows)
 
-      // Update cursor position
+      // Update cursor position past the last consumed row
+      // SINCE is inclusive, so advance by 1 to avoid re-reading
       const lastRow = result.rows[result.rows.length - 1]
-      if (lastRow.rw_timestamp) {
-        this.cursors.set(viewName, lastRow.rw_timestamp)
+      if (lastRow.rw_timestamp != null) {
+        const nextTs = BigInt(lastRow.rw_timestamp) + 1n
+        this.cursors.set(viewName, nextTs.toString())
       }
 
       await this.client.query(`CLOSE ${cursorName}`)
@@ -133,17 +134,23 @@ export class CursorManager {
       const { op, rw_timestamp, ...data } = row
       diff.cursor = rw_timestamp ?? diff.cursor
 
-      switch (op) {
-        case 1: // Insert
+      // RisingWave returns op as a string: "Insert", "Delete", "UpdateInsert", "UpdateDelete"
+      const opStr = String(op)
+      switch (opStr) {
+        case 'Insert':
+        case '1':
           diff.inserted.push(data)
           break
-        case 2: // Delete
+        case 'Delete':
+        case '2':
           diff.deleted.push(data)
           break
-        case 3: // Update (old value)
+        case 'UpdateDelete':
+        case '3':
           diff.deleted.push(data)
           break
-        case 4: // Update (new value)
+        case 'UpdateInsert':
+        case '4':
           diff.updated.push(data)
           break
       }
