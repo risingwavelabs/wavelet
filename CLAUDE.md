@@ -142,16 +142,20 @@ If you rename packages again, wavelet-cloud's imports and vendor will break.
 
 ## Agent Communication (Stream0)
 
-This agent uses Stream0 for cross-repo coordination with wavelet-cloud-agent.
+This agent uses Stream0 for cross-repo coordination with wavelet-cloud.
 
 - **Stream0 URL**: `http://3.94.39.251:8080`
 - **Agent ID**: `wavelet-agent`
-- **Peer**: `wavelet-cloud-agent`
-- **Task ID for sync**: `cross-repo-sync`
+- **Peer**: `wavelet-cloud`
+- **Task IDs**:
+  - `cross-repo-sync` - general status updates and interface changes
+  - `breaking-change` - urgent: something will break if not addressed
+  - `feature-request` - one repo requesting a feature from the other
+  - `bug-report` - cross-repo bugs
 
 ### At session start
 
-Check inbox for messages from wavelet-cloud-agent:
+Check inbox for messages from wavelet-cloud:
 
 ```bash
 curl -s "http://3.94.39.251:8080/agents/wavelet-agent/inbox?status=unread" \
@@ -167,10 +171,10 @@ curl -s -X POST "http://3.94.39.251:8080/inbox/messages/{id}/ack" \
 
 ### When making breaking changes
 
-Send a notification to wavelet-cloud-agent:
+Send a notification to wavelet-cloud:
 
 ```bash
-curl -s -X POST "http://3.94.39.251:8080/agents/wavelet-cloud-agent/inbox" \
+curl -s -X POST "http://3.94.39.251:8080/agents/wavelet-cloud/inbox" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $STREAM0_API_KEY" \
   -d '{"task_id":"cross-repo-sync","from":"wavelet-agent","type":"request","content":{"change":"description of what changed"}}'
