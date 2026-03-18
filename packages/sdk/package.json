@@ -1,6 +1,6 @@
 {
   "name": "@risingwave/wavelet-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Wavelet TypeScript SDK - subscribe to computed results",
   "homepage": "https://github.com/risingwavelabs/wavelet",
   "repository": {
