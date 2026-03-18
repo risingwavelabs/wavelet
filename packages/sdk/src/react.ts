@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { WaveletClient } from './client.js'
 import type { Diff, WaveletClientOptions } from './types.js'
 import { WaveletError } from './types.js'
@@ -19,6 +19,11 @@ export function getClient(): WaveletClient {
   return globalClient
 }
 
+export interface UseWaveletOptions {
+  params?: Record<string, string>
+  keyBy?: string
+}
+
 export interface UseWaveletResult<T> {
   data: T[]
   isLoading: boolean
@@ -27,12 +32,14 @@ export interface UseWaveletResult<T> {
 
 export function useWavelet<T = Record<string, unknown>>(
   viewName: string,
-  params?: Record<string, string>
+  options?: UseWaveletOptions
 ): UseWaveletResult<T> {
   const [data, setData] = useState<T[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<WaveletError | null>(null)
   const dataRef = useRef<T[]>([])
+  const keyBy = options?.keyBy
+  const params = options?.params
 
   useEffect(() => {
     const client = getClient()
@@ -54,23 +61,14 @@ export function useWavelet<T = Record<string, unknown>>(
     const unsub = client.view<T>(viewName).subscribe({
       onData: (diff: Diff<T>) => {
         if (cancelled) return
-        // Simple merge: this is a naive approach, replace with key-based merge in production
-        let current = [...dataRef.current]
 
-        // Remove deleted rows (by reference equality on all fields)
-        if (diff.deleted.length > 0) {
-          const deletedJson = new Set(diff.deleted.map(r => JSON.stringify(r)))
-          current = current.filter(r => !deletedJson.has(JSON.stringify(r)))
+        if (keyBy) {
+          dataRef.current = mergeByKey(dataRef.current, diff, keyBy)
+        } else {
+          dataRef.current = mergeNaive(dataRef.current, diff)
         }
 
-        // Add inserted rows
-        current.push(...diff.inserted)
-
-        // For updates: remove old, add new (updates come as pairs)
-        current.push(...diff.updated)
-
-        dataRef.current = current
-        setData(current)
+        setData([...dataRef.current])
       },
       onError: (err) => {
         if (cancelled) return
@@ -82,7 +80,53 @@ export function useWavelet<T = Record<string, unknown>>(
       cancelled = true
       unsub()
     }
-  }, [viewName, JSON.stringify(params)])
+  }, [viewName, keyBy, JSON.stringify(params)])
 
   return { data, isLoading, error }
+}
+
+/**
+ * Key-based merge: uses a specified field as primary key.
+ * O(n) using a Map, no JSON.stringify needed.
+ */
+function mergeByKey<T>(current: T[], diff: Diff<T>, keyBy: string): T[] {
+  const map = new Map<unknown, T>()
+  for (const row of current) {
+    map.set((row as any)[keyBy], row)
+  }
+
+  // Remove deleted rows
+  for (const row of diff.deleted) {
+    map.delete((row as any)[keyBy])
+  }
+
+  // Apply updates (replace existing rows by key)
+  for (const row of diff.updated) {
+    map.set((row as any)[keyBy], row)
+  }
+
+  // Add inserted rows
+  for (const row of diff.inserted) {
+    map.set((row as any)[keyBy], row)
+  }
+
+  return Array.from(map.values())
+}
+
+/**
+ * Naive merge: uses JSON.stringify for equality.
+ * Fallback when no keyBy is specified.
+ */
+function mergeNaive<T>(current: T[], diff: Diff<T>): T[] {
+  let result = [...current]
+
+  if (diff.deleted.length > 0) {
+    const deletedJson = new Set(diff.deleted.map(r => JSON.stringify(r)))
+    result = result.filter(r => !deletedJson.has(JSON.stringify(r)))
+  }
+
+  result.push(...diff.inserted)
+  result.push(...diff.updated)
+
+  return result
 }
