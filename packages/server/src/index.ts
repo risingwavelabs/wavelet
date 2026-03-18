@@ -1,6 +1,9 @@
 import { loadConfig } from './config-loader.js'
 import { WaveletServer } from './server.js'
 
+export { WaveletServer } from './server.js'
+export { loadConfig } from './config-loader.js'
+
 async function main() {
   const configPath = process.argv[2] || './wavelet.config.ts'
   const config = await loadConfig(configPath)
