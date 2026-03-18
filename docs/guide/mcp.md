@@ -15,7 +15,7 @@ Add to your MCP settings:
   "mcpServers": {
     "wavelet": {
       "command": "npx",
-      "args": ["@wavelet/mcp"],
+      "args": ["@risingwave/wavelet-mcp"],
       "env": {
         "WAVELET_DATABASE_URL": "postgres://root@localhost:4566/dev"
       }
@@ -33,7 +33,7 @@ Add to `.cursor/mcp.json`:
   "mcpServers": {
     "wavelet": {
       "command": "npx",
-      "args": ["@wavelet/mcp"],
+      "args": ["@risingwave/wavelet-mcp"],
       "env": {
         "WAVELET_DATABASE_URL": "postgres://root@localhost:4566/dev"
       }

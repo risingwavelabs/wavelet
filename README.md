@@ -20,14 +20,14 @@ Most databases tell you **data changed**. Wavelet tells you **your computed resu
 ### 1. Install
 
 ```bash
-npm install wavelet
+npm install @risingwave/wavelet
 ```
 
 ### 2. Define your config
 
 ```typescript
 // wavelet.config.ts
-import { defineConfig, sql } from 'wavelet'
+import { defineConfig, sql } from '@risingwave/wavelet'
 
 export default defineConfig({
   database: 'postgres://root@localhost:4566/dev',
@@ -169,7 +169,7 @@ Wavelet includes an MCP (Model Context Protocol) server that lets AI agents quer
   "mcpServers": {
     "wavelet": {
       "command": "npx",
-      "args": ["@wavelet/mcp"],
+      "args": [@risingwave/wavelet-mcp],
       "env": {
         "WAVELET_DATABASE_URL": "postgres://root@localhost:4566/dev"
       }
@@ -194,7 +194,7 @@ Available tools:
 ```
 wavelet/
 ├── packages/
-│   ├── config/    # defineConfig, sql tag, types (published as `wavelet`)
+│   ├── config/    # defineConfig, sql tag, types (published as `@risingwave/wavelet`)
 │   ├── server/    # WebSocket fanout + cursor polling + JWT + HTTP API
 │   ├── sdk/       # TypeScript client + React hooks
 │   ├── cli/       # CLI tools (init, generate, dev, push)

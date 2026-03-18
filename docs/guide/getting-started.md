@@ -8,7 +8,7 @@
 ## Install
 
 ```bash
-npm install wavelet
+npm install @risingwave/wavelet
 ```
 
 ## Initialize a project
@@ -24,7 +24,7 @@ This creates `wavelet.config.ts` in your current directory.
 Edit `wavelet.config.ts`:
 
 ```typescript
-import { defineConfig, sql } from 'wavelet'
+import { defineConfig, sql } from '@risingwave/wavelet'
 
 export default defineConfig({
   database: process.env.WAVELET_DATABASE_URL ?? 'postgres://root@localhost:4566/dev',

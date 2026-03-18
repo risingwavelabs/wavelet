@@ -8,8 +8,8 @@ import http from 'node:http'
 import { WebSocket } from 'ws'
 import { DdlManager } from '../ddl-manager.js'
 import { WaveletServer } from '../server.js'
-import { sql } from 'wavelet'
-import type { WaveletConfig } from 'wavelet'
+import { sql } from '@risingwave/wavelet'
+import type { WaveletConfig } from '@risingwave/wavelet'
 
 const { Client } = pg
 

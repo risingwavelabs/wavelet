@@ -1,6 +1,6 @@
 {
-  "name": "wavelet",
-  "version": "0.1.0",
+  "name": "@risingwave/wavelet",
+  "version": "0.1.1",
   "description": "Subscribe to computed results, not raw rows",
   "homepage": "https://github.com/risingwavelabs/wavelet",
   "repository": {
@@ -27,11 +27,19 @@
       "default": "./dist/config.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch"
   },
-  "keywords": ["wavelet", "realtime", "risingwave", "websocket", "streaming"],
+  "keywords": [
+    "wavelet",
+    "realtime",
+    "risingwave",
+    "websocket",
+    "streaming"
+  ],
   "license": "Apache-2.0"
 }

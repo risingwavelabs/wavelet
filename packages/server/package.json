@@ -1,7 +1,6 @@
 {
-  "name": "@wavelet/server",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@risingwave/wavelet-server",
+  "version": "0.1.1",
   "description": "Wavelet server - WebSocket fanout layer for RisingWave",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,7 +13,7 @@
     "pg": "^8.13.0",
     "ws": "^8.18.0",
     "jose": "^6.0.0",
-    "wavelet": "0.1.0"
+    "@risingwave/wavelet": "0.1.1"
   },
   "devDependencies": {
     "@types/pg": "^8.11.0",

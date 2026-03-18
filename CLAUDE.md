@@ -8,11 +8,11 @@ Monorepo using npm workspaces (`packages/*`, `examples/*`). Node >= 20.
 
 | Package | Published name | Purpose |
 |---------|---------------|---------|
-| `packages/config` | `wavelet` | `defineConfig`, `sql` tag, shared types |
-| `packages/server` | `@wavelet/server` | WebSocket fanout, subscription cursor polling, JWT auth, HTTP API |
-| `packages/sdk` | `@wavelet/sdk` | TypeScript client + React hooks (`@wavelet/sdk/react`) |
-| `packages/cli` | `@wavelet/cli` | CLI binary (`wavelet push`, `wavelet dev`, codegen) |
-| `packages/mcp` | `@wavelet/mcp` | MCP server - exposes views and streams as AI agent tools |
+| `packages/config` | `@risingwave/wavelet` | `defineConfig`, `sql` tag, shared types |
+| `packages/server` | `@risingwave/wavelet-server` | WebSocket fanout, subscription cursor polling, JWT auth, HTTP API |
+| `packages/sdk` | `@risingwave/wavelet-sdk` | TypeScript client + React hooks (`@wavelet/sdk/react`) |
+| `packages/cli` | `@risingwave/wavelet-cli` | CLI binary (`wavelet push`, `wavelet dev`, codegen) |
+| `packages/mcp` | `@risingwave/wavelet-mcp` | MCP server - exposes views and streams as AI agent tools |
 
 Dependency graph: `config` is the leaf. `server` and `sdk` depend on `config`. `cli` depends on `server` and `config`. `mcp` depends on `config` and `pg`.
 

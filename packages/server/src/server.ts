@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http'
-import type { WaveletConfig } from 'wavelet'
+import type { WaveletConfig } from '@risingwave/wavelet'
 import { CursorManager } from './cursor-manager.js'
 import { WebSocketFanout } from './ws-fanout.js'
 import { HttpApi } from './http-api.js'

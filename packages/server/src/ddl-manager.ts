@@ -1,5 +1,5 @@
 import pg from 'pg'
-import type { WaveletConfig, StreamDef, ViewDef, SqlFragment } from 'wavelet'
+import type { WaveletConfig, StreamDef, ViewDef, SqlFragment } from '@risingwave/wavelet'
 
 const { Client } = pg
 

@@ -1,6 +1,6 @@
 {
-  "name": "@wavelet/cli",
-  "version": "0.1.0",
+  "name": "@risingwave/wavelet-cli",
+  "version": "0.1.1",
   "description": "Wavelet CLI - manage views, generate types, run dev server",
   "bin": {
     "wavelet": "./dist/index.js"
@@ -10,8 +10,8 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "wavelet": "0.1.0",
-    "@wavelet/server": "0.1.0",
+    "@risingwave/wavelet": "0.1.1",
+    "@risingwave/wavelet-server": "0.1.1",
     "pg": "^8.13.0"
   },
   "devDependencies": {

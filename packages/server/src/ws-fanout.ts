@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import type { IncomingMessage, Server } from 'node:http'
-import type { ViewDef, SqlFragment } from 'wavelet'
+import type { ViewDef, SqlFragment } from '@risingwave/wavelet'
 import type { CursorManager, ViewDiff } from './cursor-manager.js'
 import type { JwtVerifier, JwtClaims } from './jwt.js'
 

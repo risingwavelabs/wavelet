@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
-import type { WaveletConfig } from 'wavelet'
+import type { WaveletConfig } from '@risingwave/wavelet'
 
 export async function loadConfig(configPath: string): Promise<WaveletConfig> {
   const abs = resolve(configPath)
@@ -11,7 +11,7 @@ export async function loadConfig(configPath: string): Promise<WaveletConfig> {
     throw new Error(
       `wavelet.config.ts must export a config with a 'database' field.\n` +
       `Example:\n` +
-      `  import { defineConfig } from 'wavelet'\n` +
+      `  import { defineConfig } from '@risingwave/wavelet'\n` +
       `  export default defineConfig({ database: 'postgres://...' })`
     )
   }

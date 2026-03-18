@@ -64,7 +64,7 @@ async function runInit() {
     return
   }
 
-  writeFileSync('wavelet.config.ts', `import { defineConfig, sql } from 'wavelet'
+  writeFileSync('wavelet.config.ts', `import { defineConfig, sql } from '@risingwave/wavelet'
 
 export default defineConfig({
   database: process.env.WAVELET_DATABASE_URL ?? 'postgres://root@localhost:4566/dev',
@@ -112,7 +112,7 @@ async function runDev() {
   const rwProcess = await ensureRisingWave(config.database)
 
   // Sync DDL before starting server
-  const { DdlManager, WaveletServer } = await import('@wavelet/server')
+  const { DdlManager, WaveletServer } = await import('@risingwave/wavelet-server')
   const ddl = new DdlManager(config.database)
   await ddl.connect()
 
@@ -157,7 +157,7 @@ async function runPush() {
   console.log(`Loading config from ${configPath}...`)
   const config = await loadConfig(configPath)
 
-  const { DdlManager } = await import('@wavelet/server')
+  const { DdlManager } = await import('@risingwave/wavelet-server')
   const ddl = new DdlManager(config.database)
   await ddl.connect()
 

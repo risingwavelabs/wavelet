@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import pg from 'pg'
-import type { StreamDef, ViewDef, SqlFragment } from 'wavelet'
+import type { StreamDef, ViewDef, SqlFragment } from '@risingwave/wavelet'
 
 const { Client } = pg
 
