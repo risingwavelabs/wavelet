@@ -2,6 +2,12 @@
   "name": "@wavelet/sdk",
   "version": "0.1.0",
   "description": "Wavelet TypeScript SDK - subscribe to computed results",
+  "homepage": "https://github.com/risingwavelabs/wavelet",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/risingwavelabs/wavelet.git",
+    "directory": "packages/sdk"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
