@@ -216,7 +216,7 @@ export class DdlManager {
 
   private async tableHasDependentViews(tableName: string): Promise<boolean> {
     const result = await this.client!.query(
-      `SELECT name FROM rw_catalog.rw_materialized_views WHERE schema_name = 'public' AND definition ILIKE $1`,
+      `SELECT name FROM rw_catalog.rw_materialized_views WHERE schema_id = (SELECT id FROM rw_catalog.rw_schemas WHERE name = 'public') AND definition ILIKE $1`,
       [`%${tableName}%`]
     )
     return result.rows.length > 0
