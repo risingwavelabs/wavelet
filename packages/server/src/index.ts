@@ -3,6 +3,8 @@ import { WaveletServer } from './server.js'
 
 export { WaveletServer } from './server.js'
 export { loadConfig } from './config-loader.js'
+export { DdlManager } from './ddl-manager.js'
+export type { DdlAction } from './ddl-manager.js'
 
 async function main() {
   const configPath = process.argv[2] || './wavelet.config.ts'

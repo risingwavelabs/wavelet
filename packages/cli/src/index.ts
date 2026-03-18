@@ -107,7 +107,17 @@ async function runDev() {
   console.log(`Loading config from ${configPath}...`)
   const config = await loadConfig(configPath)
 
-  const { WaveletServer } = await import('@wavelet/server')
+  // Sync DDL before starting server
+  const { DdlManager, WaveletServer } = await import('@wavelet/server')
+  const ddl = new DdlManager(config.database)
+  await ddl.connect()
+
+  console.log('\nSyncing streams and views...')
+  const actions = await ddl.sync(config)
+  printDdlActions(actions)
+  await ddl.close()
+
+  // Start server
   const server = new WaveletServer(config)
   await server.start()
 
@@ -139,48 +149,19 @@ async function runPush() {
   console.log(`Loading config from ${configPath}...`)
   const config = await loadConfig(configPath)
 
-  const pg = await import('pg')
-  const client = new pg.default.Client({ connectionString: config.database })
-  await client.connect()
+  const { DdlManager } = await import('@wavelet/server')
+  const ddl = new DdlManager(config.database)
+  await ddl.connect()
+
+  const actions = await ddl.sync(config)
+  await ddl.close()
 
   const isJson = process.argv.includes('--json')
-  const results: { name: string; type: string; action: string }[] = []
-
-  // Sync streams (CREATE TABLE IF NOT EXISTS)
-  for (const [name, stream] of Object.entries(config.streams ?? {})) {
-    const colDefs = Object.entries(stream.columns).map(([col, type]) => {
-      const pgType = { string: 'TEXT', int: 'INT', float: 'FLOAT', boolean: 'BOOLEAN', timestamp: 'TIMESTAMPTZ', json: 'JSONB' }[type] ?? 'TEXT'
-      return `${col} ${pgType}`
-    }).join(', ')
-
-    try {
-      await client.query(`CREATE TABLE IF NOT EXISTS ${name} (${colDefs})`)
-      results.push({ name, type: 'stream', action: 'synced' })
-      if (!isJson) console.log(`✓ Stream '${name}' — synced`)
-    } catch (err: any) {
-      results.push({ name, type: 'stream', action: `error: ${err.message}` })
-      if (!isJson) console.error(`✗ Stream '${name}' — ${err.message}`)
-    }
-  }
-
-  // Sync views (CREATE OR REPLACE)
-  for (const [name, viewDef] of Object.entries(config.views ?? {})) {
-    const query = '_tag' in viewDef ? viewDef.text : viewDef.query.text
-    try {
-      await client.query(`CREATE MATERIALIZED VIEW IF NOT EXISTS ${name} AS ${query}`)
-      results.push({ name, type: 'view', action: 'synced' })
-      if (!isJson) console.log(`✓ View '${name}' — synced`)
-    } catch (err: any) {
-      results.push({ name, type: 'view', action: `error: ${err.message}` })
-      if (!isJson) console.error(`✗ View '${name}' — ${err.message}`)
-    }
-  }
-
   if (isJson) {
-    console.log(JSON.stringify({ results }))
+    console.log(JSON.stringify({ actions }))
+  } else {
+    printDdlActions(actions)
   }
-
-  await client.end()
 }
 
 async function runStatus() {
@@ -207,6 +188,27 @@ async function runStatus() {
     console.error(`Error: ${err.message}`)
     process.exit(1)
   }
+}
+
+function printDdlActions(actions: { type: string; resource: string; name: string; detail?: string }[]): void {
+  const changed = actions.filter(a => a.type !== 'unchanged')
+  const unchanged = actions.filter(a => a.type === 'unchanged')
+
+  for (const action of actions) {
+    const icon = action.type === 'create' ? '+' : action.type === 'delete' ? '-' : ' '
+    const label = `${action.resource} '${action.name}'`
+    const detail = action.detail ? ` (${action.detail})` : ''
+
+    if (action.type === 'unchanged') {
+      console.log(`  ${icon} ${label}`)
+    } else if (action.type === 'create') {
+      console.log(`  ${icon} ${label} — created${detail}`)
+    } else if (action.type === 'delete') {
+      console.log(`  ${icon} ${label} — removed${detail}`)
+    }
+  }
+
+  console.log(`\n${changed.length} changed, ${unchanged.length} unchanged`)
 }
 
 function getConfigPath(): string {
