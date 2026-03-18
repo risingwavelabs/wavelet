@@ -1,6 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import type { IncomingMessage, Server } from 'node:http'
-import { parse as parseUrl } from 'node:url'
 import type { ViewDef, SqlFragment } from 'wavelet'
 import type { CursorManager, ViewDiff } from './cursor-manager.js'
 import type { JwtVerifier, JwtClaims } from './jwt.js'
@@ -21,10 +20,25 @@ export class WebSocketFanout {
     private views: Record<string, ViewDef | SqlFragment>
   ) {}
 
-  attach(server: Server): void {
-    this.wss = new WebSocketServer({ server })
+  attach(server: Server, pathPrefix?: string): void {
+    this.wss = new WebSocketServer({ noServer: true })
+
+    server.on('upgrade', (req, socket, head) => {
+      const pathname = req.url?.split('?')[0] ?? ''
+      const subscribePrefix = (pathPrefix ?? '') + '/subscribe/'
+
+      if (pathname.startsWith(subscribePrefix)) {
+        this.wss!.handleUpgrade(req, socket, head, (ws) => {
+          this.wss!.emit('connection', ws, req)
+        })
+      }
+    })
 
     this.wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
+      // Strip path prefix before handling
+      if (pathPrefix && req.url?.startsWith(pathPrefix)) {
+        req.url = req.url.slice(pathPrefix.length)
+      }
       try {
         await this.handleConnection(ws, req)
       } catch (err: any) {
@@ -35,7 +49,7 @@ export class WebSocketFanout {
   }
 
   private async handleConnection(ws: WebSocket, req: IncomingMessage): Promise<void> {
-    const url = parseUrl(req.url ?? '', true)
+    const url = new URL(req.url ?? '', `http://${req.headers.host ?? 'localhost'}`)
     const match = url.pathname?.match(/^\/subscribe\/(.+)$/)
 
     if (!match) {
@@ -56,7 +70,7 @@ export class WebSocketFanout {
 
     // Verify JWT if configured
     let claims: JwtClaims | null = null
-    const token = url.query.token as string | undefined
+    const token = url.searchParams.get('token')
       ?? req.headers.authorization?.replace('Bearer ', '')
 
     if (this.jwt.isConfigured()) {

@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from 'node:http'
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http'
 import type { WaveletConfig } from 'wavelet'
 import { CursorManager } from './cursor-manager.js'
 import { WebSocketFanout } from './ws-fanout.js'
@@ -39,6 +39,32 @@ export class WaveletServer {
         resolve()
       })
     })
+  }
+
+  /**
+   * Attach to an existing HTTP server instead of creating one.
+   * Used by Wavelet Cloud to run multiple instances on a shared port.
+   */
+  async attachTo(server: Server, opts?: { pathPrefix?: string }): Promise<{
+    handleHttp: (req: IncomingMessage, res: ServerResponse) => void
+  }> {
+    const prefix = opts?.pathPrefix ?? ''
+
+    this.fanout.attach(server, prefix)
+
+    await this.cursorManager.initialize()
+    this.cursorManager.startPolling((viewName, diffs) => {
+      this.fanout.broadcast(viewName, diffs)
+    })
+
+    const handleHttp = (req: IncomingMessage, res: ServerResponse) => {
+      if (prefix && req.url?.startsWith(prefix)) {
+        req.url = req.url.slice(prefix.length) || '/'
+      }
+      this.httpApi.handle(req, res)
+    }
+
+    return { handleHttp }
   }
 
   async stop(): Promise<void> {

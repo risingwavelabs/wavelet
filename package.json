@@ -8,11 +8,15 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspace=packages/server",
-    "test": "npm test --workspaces --if-present",
+    "test": "vitest run",
     "lint": "eslint packages/ --ext .ts",
     "typecheck": "tsc --build packages/*/tsconfig.json"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "vitest": "^4.1.0"
   }
 }
