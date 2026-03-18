@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build packages
+        run: |
+          npx tsc --build packages/config/tsconfig.json
+          npx tsc --build packages/server/tsconfig.json
+          npx tsc --build packages/sdk/tsconfig.json
+          npx tsc --build packages/cli/tsconfig.json
+          npx tsc --build packages/mcp/tsconfig.json
+
+      - name: Run tests
+        run: npx vitest run
+
+      - name: Publish wavelet (config)
+        run: npm publish --workspace=packages/config --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @wavelet/sdk
+        run: npm publish --workspace=packages/sdk --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @wavelet/server
+        run: npm publish --workspace=packages/server --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @wavelet/cli
+        run: npm publish --workspace=packages/cli --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @wavelet/mcp
+        run: npm publish --workspace=packages/mcp --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
