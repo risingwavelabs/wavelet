@@ -1,11 +1,11 @@
 import pg from 'pg'
-import type { WaveletConfig, StreamDef, ViewDef, SqlFragment } from '@risingwave/wavelet'
+import type { WaveletConfig, StreamDef, ViewDef, SqlFragment, PostgresCdcSource } from '@risingwave/wavelet'
 
 const { Client } = pg
 
 export interface DdlAction {
   type: 'create' | 'update' | 'delete' | 'unchanged'
-  resource: 'stream' | 'view' | 'subscription'
+  resource: 'stream' | 'source' | 'view' | 'subscription'
   name: string
   detail?: string
 }
@@ -75,6 +75,7 @@ export class DdlManager {
     const existingSubscriptions = await this.getExistingSubscriptions()
 
     const desiredStreams = config.streams ?? {}
+    const desiredSources = config.sources ?? {}
     const desiredViews = config.views ?? {}
 
     // 2. Determine which streams (tables) to create or remove
@@ -88,6 +89,22 @@ export class DdlManager {
       } else {
         await this.createTable(streamName, streamDef)
         actions.push({ type: 'create', resource: 'stream', name: streamName })
+      }
+    }
+
+    // 3b. Sync CDC sources - create Postgres CDC tables
+    const existingSources = await this.getExistingSources()
+    for (const [sourceName, sourceDef] of Object.entries(desiredSources)) {
+      if (sourceDef.type === 'postgres') {
+        for (const tableName of sourceDef.tables) {
+          const cdcTableName = `${sourceName}_${tableName}`
+          if (existingSources.has(cdcTableName) || existingTables.has(cdcTableName)) {
+            actions.push({ type: 'unchanged', resource: 'source', name: cdcTableName })
+          } else {
+            await this.createCdcSource(sourceName, tableName, sourceDef)
+            actions.push({ type: 'create', resource: 'source', name: cdcTableName })
+          }
+        }
       }
     }
 
@@ -207,6 +224,18 @@ export class DdlManager {
     return views
   }
 
+  private async getExistingSources(): Promise<Set<string>> {
+    try {
+      const result = await this.client!.query(
+        `SELECT name FROM rw_catalog.rw_tables WHERE schema_id = (SELECT id FROM rw_catalog.rw_schemas WHERE name = 'public') AND is_index = false`
+      )
+      return new Set(result.rows.map((r: any) => r.name))
+    } catch {
+      // Fallback: if catalog query fails, return empty set
+      return new Set()
+    }
+  }
+
   private async getExistingSubscriptions(): Promise<Set<string>> {
     const result = await this.client!.query(
       `SELECT name FROM rw_catalog.rw_subscriptions WHERE schema_id = (SELECT id FROM rw_catalog.rw_schemas WHERE name = 'public')`
@@ -303,5 +332,76 @@ export class DdlManager {
         throw err
       }
     }
+  }
+
+  private async createCdcSource(
+    sourceName: string,
+    tableName: string,
+    source: PostgresCdcSource
+  ): Promise<void> {
+    const cdcTableName = `${sourceName}_${tableName}`
+    const slotName = source.slotName ?? `wavelet_${sourceName}`
+    const pubName = source.publicationName ?? `wavelet_${sourceName}_pub`
+
+    // RisingWave CDC source syntax:
+    // CREATE TABLE table_name ( ... ) WITH (
+    //   connector = 'postgres-cdc',
+    //   hostname = '...',
+    //   port = '...',
+    //   username = '...',
+    //   password = '...',
+    //   database.name = '...',
+    //   table.name = '...',
+    //   slot.name = '...',
+    //   publication.name = '...'
+    // )
+    // We parse the connection string to extract components.
+
+    const parsed = parsePostgresUrl(source.connection)
+
+    try {
+      await this.client!.query(`
+        CREATE TABLE IF NOT EXISTS ${cdcTableName} (*)
+        WITH (
+          connector = 'postgres-cdc',
+          hostname = '${parsed.host}',
+          port = '${parsed.port}',
+          username = '${parsed.user}',
+          password = '${parsed.password}',
+          database.name = '${parsed.database}',
+          schema.name = '${parsed.schema}',
+          table.name = '${tableName}',
+          slot.name = '${slotName}',
+          publication.name = '${pubName}'
+        )
+      `)
+      console.log(`[ddl-manager] Created CDC source: ${cdcTableName} (from ${parsed.host}/${parsed.database}.${tableName})`)
+    } catch (err: any) {
+      if (err.message?.includes('already exists')) {
+        console.log(`[ddl-manager] CDC source already exists: ${cdcTableName}`)
+      } else {
+        throw err
+      }
+    }
+  }
+}
+
+function parsePostgresUrl(url: string): {
+  host: string
+  port: string
+  user: string
+  password: string
+  database: string
+  schema: string
+} {
+  // Parse postgresql://user:password@host:port/database?schema=xxx
+  const u = new URL(url)
+  return {
+    host: u.hostname,
+    port: u.port || '5432',
+    user: decodeURIComponent(u.username),
+    password: decodeURIComponent(u.password),
+    database: u.pathname.replace(/^\//, '') || 'postgres',
+    schema: u.searchParams.get('schema') ?? 'public',
   }
 }
