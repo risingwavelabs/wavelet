@@ -70,6 +70,7 @@ export class WaveletServer {
   async stop(): Promise<void> {
     this.cursorManager.stopPolling()
     this.fanout.closeAll()
+    await this.cursorManager.close()
     await new Promise<void>((resolve) => {
       if (this.httpServer) {
         this.httpServer.close(() => resolve())

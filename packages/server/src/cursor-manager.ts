@@ -18,11 +18,22 @@ export interface ViewDiff {
 
 type DiffCallback = (viewName: string, diff: ViewDiff) => void
 
+/**
+ * Manages persistent subscription cursors against RisingWave.
+ *
+ * Each view gets its own dedicated pg connection and a persistent cursor.
+ * Uses blocking FETCH (WITH timeout) so there is no polling interval -
+ * diffs are dispatched as soon as RisingWave produces them.
+ */
 export class CursorManager {
+  // Shared connection for DDL (CREATE SUBSCRIPTION) and ad-hoc queries
   private client: InstanceType<typeof Client> | null = null
-  private cursors: Map<string, string> = new Map() // viewName -> last rw_timestamp
-  private subscriptions: Map<string, string> = new Map() // viewName -> subscription name
-  private pollInterval: ReturnType<typeof setInterval> | null = null
+
+  // Per-view dedicated connections for blocking FETCH
+  private viewConnections: Map<string, InstanceType<typeof Client>> = new Map()
+  private cursorNames: Map<string, string> = new Map()
+  private subscriptions: Map<string, string> = new Map()
+  private running = false
 
   constructor(
     private connectionString: string,
@@ -52,77 +63,80 @@ export class CursorManager {
       }
 
       this.subscriptions.set(viewName, subName)
-      // Initialize cursor to now (epoch milliseconds)
-      this.cursors.set(viewName, String(Date.now()))
+
+      // Create dedicated connection and persistent cursor for this view
+      const conn = new Client({ connectionString: this.connectionString })
+      await conn.connect()
+
+      const cursorName = `wavelet_cur_${viewName}`
+      await conn.query(`DECLARE ${cursorName} SUBSCRIPTION CURSOR FOR ${subName}`)
+      console.log(`Opened persistent cursor: ${cursorName}`)
+
+      this.viewConnections.set(viewName, conn)
+      this.cursorNames.set(viewName, cursorName)
     }
   }
 
-  startPolling(callback: DiffCallback, intervalMs: number = 200): void {
-    this.pollInterval = setInterval(async () => {
-      for (const [viewName, subName] of this.subscriptions.entries()) {
-        try {
-          await this.fetchAndDispatch(viewName, subName, callback)
-        } catch (err) {
-          console.error(`Error polling ${viewName}:`, err)
-        }
-      }
-    }, intervalMs)
+  /**
+   * Start listening for diffs on all views.
+   * Each view runs its own async loop with blocking FETCH.
+   * No polling interval - FETCH blocks until data arrives or timeout.
+   */
+  startPolling(callback: DiffCallback): void {
+    this.running = true
+
+    for (const [viewName] of this.subscriptions.entries()) {
+      this.listenLoop(viewName, callback)
+    }
   }
 
   stopPolling(): void {
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval)
-      this.pollInterval = null
-    }
+    this.running = false
   }
 
-  private async fetchAndDispatch(
-    viewName: string,
-    subName: string,
-    callback: DiffCallback
-  ): Promise<void> {
-    if (!this.client) return
+  private async listenLoop(viewName: string, callback: DiffCallback): Promise<void> {
+    const conn = this.viewConnections.get(viewName)
+    const cursorName = this.cursorNames.get(viewName)
+    if (!conn || !cursorName) return
 
-    const lastTs = this.cursors.get(viewName)
-    const cursorName = `wavelet_cursor_${viewName}_${Date.now()}`
-
-    try {
-      await this.client.query(
-        `DECLARE ${cursorName} SUBSCRIPTION CURSOR FOR ${subName} SINCE ${lastTs}`
-      )
-
-      const result = await this.client.query(
-        `FETCH 1000 FROM ${cursorName}`
-      )
-
-      if (result.rows.length === 0) {
-        await this.client.query(`CLOSE ${cursorName}`)
-        return
-      }
-
-      const diff = this.parseDiffs(result.rows)
-
-      // Update cursor position past the last consumed row
-      // SINCE is inclusive, so advance by 1 to avoid re-reading
-      const lastRow = result.rows[result.rows.length - 1]
-      if (lastRow.rw_timestamp != null) {
-        const nextTs = BigInt(lastRow.rw_timestamp) + 1n
-        this.cursors.set(viewName, nextTs.toString())
-      }
-
-      await this.client.query(`CLOSE ${cursorName}`)
-
-      callback(viewName, diff)
-    } catch (err) {
-      // Try to close cursor on error
+    while (this.running) {
       try {
-        await this.client.query(`CLOSE ${cursorName}`)
-      } catch {}
-      throw err
+        // Blocking FETCH: waits up to 5s for new data, returns immediately when data arrives
+        const result = await conn.query(
+          `FETCH NEXT FROM ${cursorName} WITH (timeout = '5s')`
+        )
+
+        if (result.rows.length === 0) continue
+
+        // Got at least one row. Drain any remaining rows without blocking.
+        const allRows = [...result.rows]
+        let more = true
+        while (more) {
+          const batch = await conn.query(
+            `FETCH 100 FROM ${cursorName}`
+          )
+          if (batch.rows.length > 0) {
+            allRows.push(...batch.rows)
+          } else {
+            more = false
+          }
+        }
+
+        const diff = this.parseDiffs(allRows)
+
+        if (diff.inserted.length > 0 || diff.updated.length > 0 || diff.deleted.length > 0) {
+          callback(viewName, diff)
+        }
+      } catch (err: any) {
+        if (!this.running) return
+        console.error(`[cursor-manager] Error fetching ${viewName}:`, err.message)
+        // Back off on error, then retry
+        await new Promise(r => setTimeout(r, 1000))
+      }
     }
   }
 
-  private parseDiffs(rows: any[]): ViewDiff {
+  parseDiffs(rows: any[]): ViewDiff {
     const diff: ViewDiff = {
       cursor: '',
       inserted: [],
@@ -168,5 +182,28 @@ export class CursorManager {
   async execute(sql: string): Promise<void> {
     if (!this.client) throw new Error('Not connected')
     await this.client.query(sql)
+  }
+
+  async close(): Promise<void> {
+    this.running = false
+
+    // Close per-view connections
+    for (const [viewName, conn] of this.viewConnections) {
+      const cursorName = this.cursorNames.get(viewName)
+      try {
+        if (cursorName) await conn.query(`CLOSE ${cursorName}`)
+      } catch {}
+      try {
+        await conn.end()
+      } catch {}
+    }
+    this.viewConnections.clear()
+    this.cursorNames.clear()
+
+    // Close shared connection
+    try {
+      await this.client?.end()
+    } catch {}
+    this.client = null
   }
 }
