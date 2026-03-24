@@ -1,29 +1,66 @@
 # Wavelet
 
-**Subscribe to computed results, not raw rows.**
+**The reactive backend for agents and apps.**
 
-Wavelet is a real-time backend that pushes pre-computed query results to your app over WebSocket. Define a SQL view, subscribe from your frontend - Wavelet keeps it up to date automatically.
+Write a SQL query. Subscribe to its result from a React component or an AI agent. When the underlying data changes, Wavelet pushes the recomputed result to every subscriber.
 
-Built on [RisingWave](https://github.com/risingwavelabs/risingwave), an incremental computation engine. By the RisingWave team.
+Built on [RisingWave](https://github.com/risingwavelabs/risingwave). By the RisingWave team.
 
-## Why Wavelet
+## Examples
 
-Most databases tell you **data changed**. Wavelet tells you **your computed result changed** - and delivers it to your app.
+**Live leaderboard** — ranks recompute on every score submission, all clients see the update:
 
-- **No polling** - results push to your app within 500ms of source data changes
-- **Pre-computed** - 1 client or 10,000, query cost is the same
-- **Typed** - codegen gives your IDE and AI agent full autocomplete
-- **Filtered** - JWT-based per-tenant filtering, enforced server-side
+```typescript
+views: {
+  leaderboard: sql`
+    SELECT player_id, SUM(score) AS total_score, COUNT(*) AS games_played
+    FROM game_events GROUP BY player_id
+    ORDER BY total_score DESC LIMIT 100
+  `
+}
+```
+
+```typescript
+const { data } = useWavelet('leaderboard')  // re-renders on rank changes
+```
+
+**Per-tenant LLM cost tracking** — each tenant sees only their own usage via JWT filtering:
+
+```typescript
+views: {
+  tenant_usage: {
+    query: sql`
+      SELECT tenant_id, SUM(cost_usd) AS total_cost,
+             SUM(tokens_in + tokens_out) AS total_tokens
+      FROM llm_events GROUP BY tenant_id
+    `,
+    filterBy: 'tenant_id',
+  }
+}
+```
+
+**Operational metrics** — error rates, latency percentiles, grouped by endpoint:
+
+```typescript
+views: {
+  api_health: sql`
+    SELECT endpoint, COUNT(*) AS requests,
+           AVG(latency_ms)::INT AS avg_latency,
+           SUM(CASE WHEN status >= 500 THEN 1 ELSE 0 END) AS errors
+    FROM api_events GROUP BY endpoint
+  `
+}
+```
+
+All three work the same way: define a SQL view, subscribe from your app or agent, get live updates. The view is incrementally maintained by RisingWave — not re-queried on every change.
 
 ## Quick Start
-
-### 1. Install
 
 ```bash
 npm install @risingwave/wavelet
 ```
 
-### 2. Define your config
+**1. Define your config**
 
 ```typescript
 // wavelet.config.ts
@@ -54,13 +91,17 @@ export default defineConfig({
 })
 ```
 
-### 3. Generate typed client
+**2. Start dev server**
 
 ```bash
-npx wavelet generate
+npx wavelet dev
 ```
 
-### 4. Use in your app
+**3. Subscribe from your app**
+
+```bash
+npx wavelet generate   # generates .wavelet/client.ts with full types
+```
 
 ```typescript
 import { useWavelet } from './.wavelet/client'
@@ -68,7 +109,7 @@ import { useWavelet } from './.wavelet/client'
 function Leaderboard() {
   const { data, isLoading } = useWavelet('leaderboard')
   // data: { player_id: string, total_score: number, games_played: number }[]
-  // Updates automatically via WebSocket - no polling, no refetching
+  // Updates automatically via WebSocket
 
   if (isLoading) return <div>Loading...</div>
 
@@ -82,7 +123,7 @@ function Leaderboard() {
 }
 ```
 
-### 5. Write events
+**4. Write events**
 
 ```typescript
 await wavelet.streams.game_events.emit({
@@ -90,86 +131,19 @@ await wavelet.streams.game_events.emit({
   score: 42,
   event_type: 'win',
 })
+// Leaderboard recomputes. All clients receive the diff.
 ```
 
-## How It Works
+## Agent Integration (MCP)
 
-```
-Your App <-- WebSocket -- Wavelet Server -- SQL cursor -- RisingWave
-                              ↑                              ↑
-                         JWT filter                   Incremental MV
-                         + fanout                     computation
-```
-
-1. You define **streams** (where data comes in) and **views** (what to compute)
-2. Wavelet creates materialized views in RisingWave and subscribes to their change streams
-3. When source data changes, RisingWave recomputes the view incrementally
-4. Wavelet fans out the diffs to connected clients over WebSocket
-5. JWT claims are matched against view columns for per-tenant filtering
-
-Wavelet is a thin orchestration layer. The heavy computation is done by RisingWave.
-
-## Multi-Tenant Filtering
-
-Define a `filterBy` column that maps to a JWT claim:
-
-```typescript
-views: {
-  tenant_usage: {
-    query: sql`
-      SELECT tenant_id, SUM(tokens) AS tokens_today
-      FROM llm_events
-      GROUP BY tenant_id
-    `,
-    filterBy: 'tenant_id',
-  }
-}
-```
-
-A client with `{ tenant_id: "t1" }` in their JWT only receives diffs for `t1`. Enforced server-side - the client cannot override it.
-
-## CLI
-
-```bash
-wavelet init       # Create wavelet.config.ts
-wavelet generate   # Generate typed client at .wavelet/client.ts
-wavelet dev        # Start local dev server
-wavelet push       # Sync streams and views to RisingWave
-wavelet status     # Show current config summary
-```
-
-All commands are non-interactive and idempotent. Supports `--json` for structured output.
-
-## Run Locally
-
-```bash
-docker compose up     # Starts RisingWave + Wavelet
-```
-
-Then open `examples/leaderboard/index.html` in your browser.
-
-## HTTP API
-
-```
-GET  /v1/health                  → { status: "ok" }
-GET  /v1/views                   → { views: ["leaderboard", ...] }
-GET  /v1/views/{name}            → { rows: [...] }
-GET  /v1/views/{name}?key=value  → filtered result
-POST /v1/streams/{name}          → write single event
-POST /v1/streams/{name}/batch    → write batch of events
-WS   /subscribe/{name}           → real-time diffs
-```
-
-## MCP Server (AI Agent Integration)
-
-Wavelet includes an MCP (Model Context Protocol) server that lets AI agents query views and emit events directly.
+AI agents can query views and write events as tool calls — no HTTP client needed.
 
 ```json
 {
   "mcpServers": {
     "wavelet": {
       "command": "npx",
-      "args": [@risingwave/wavelet-mcp],
+      "args": ["@risingwave/wavelet-mcp"],
       "env": {
         "WAVELET_DATABASE_URL": "postgres://root@localhost:4566/dev"
       }
@@ -178,34 +152,74 @@ Wavelet includes an MCP (Model Context Protocol) server that lets AI agents quer
 }
 ```
 
-Available tools:
-
 | Tool | Description |
 |---|---|
-| `list_views` | List all materialized views with their schemas |
+| `list_views` | List all materialized views with schemas |
 | `query_view` | Query a view with optional filters |
 | `list_streams` | List all event streams |
-| `emit_event` | Write a single event to a stream |
-| `emit_batch` | Write multiple events to a stream |
+| `emit_event` | Write an event to a stream |
+| `emit_batch` | Write a batch of events |
 | `run_sql` | Execute a read-only SQL query |
+
+## How It Works
+
+```
+App / Agent  ←  WebSocket  ←  Wavelet Server  ←  SQL cursor  ←  RisingWave
+                                    │                                │
+                              JWT filtering                  Incremental
+                              + fan-out                      computation
+```
+
+1. You define **streams** (data in) and **views** (what to compute) in `wavelet.config.ts`
+2. `wavelet dev` syncs config to RisingWave — creates tables, materialized views, and subscriptions
+3. When source data changes, RisingWave incrementally recomputes affected views
+4. Wavelet maintains one cursor per view, fans out diffs to all connected clients
+5. JWT claims filter rows per-client for multi-tenant isolation
+
+Wavelet is stateless. All state lives in RisingWave.
+
+## CLI
+
+```bash
+wavelet init       # Create wavelet.config.ts
+wavelet dev        # Sync config + start dev server
+wavelet push       # Sync config to RisingWave (no server)
+wavelet generate   # Generate typed client at .wavelet/client.ts
+wavelet status     # Show current config summary
+```
+
+All commands are idempotent. Supports `--json` for structured output.
+
+## HTTP API
+
+```
+GET  /v1/health                  → { status: "ok" }
+GET  /v1/views                   → list all views
+GET  /v1/views/{name}            → current rows
+GET  /v1/views/{name}?key=value  → filtered rows
+GET  /v1/streams                 → list all streams
+POST /v1/streams/{name}          → write single event
+POST /v1/streams/{name}/batch    → write batch of events
+WS   /subscribe/{name}           → real-time diffs
+```
+
+## Run Locally
+
+```bash
+docker compose up     # Starts RisingWave + Wavelet
+```
 
 ## Project Structure
 
 ```
-wavelet/
-├── packages/
-│   ├── config/    # defineConfig, sql tag, types (published as `@risingwave/wavelet`)
-│   ├── server/    # WebSocket fanout + cursor polling + JWT + HTTP API
-│   ├── sdk/       # TypeScript client + React hooks
-│   ├── cli/       # CLI tools (init, generate, dev, push)
-│   └── mcp/       # MCP server for AI agent integration
-├── examples/
-│   ├── leaderboard/
-│   └── ai-agent-monitor/
-├── docker-compose.yml
-└── wavelet.config.ts
+packages/
+  config/    →  @risingwave/wavelet         defineConfig, sql tag, types
+  server/    →  @risingwave/wavelet-server  WebSocket fan-out, cursor polling, JWT, HTTP API
+  sdk/       →  @risingwave/wavelet-sdk     TypeScript client + React hooks
+  cli/       →  @risingwave/wavelet-cli     CLI (init, dev, push, generate)
+  mcp/       →  @risingwave/wavelet-mcp     MCP server for AI agents
 ```
 
 ## License
 
-Apache 2.0 - see [LICENSE](./LICENSE).
+Apache 2.0 — see [LICENSE](./LICENSE).
