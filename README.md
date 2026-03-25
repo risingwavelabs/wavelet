@@ -158,7 +158,7 @@ AI agents query views and write events as tool calls.
 ## Agent Onboarding
 
 ```bash
-npx skills add risingwavelabs/skills
+npx skills add risingwavelabs/skills --skill wavelet
 ```
 
 Or read [SKILL.md](https://github.com/risingwavelabs/skills/blob/main/skills/wavelet/SKILL.md) directly.
