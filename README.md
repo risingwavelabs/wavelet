@@ -223,7 +223,21 @@ export default defineConfig({
 npx wavelet dev
 ```
 
-**3. Subscribe from your app**
+**3. Start the React example app**
+
+```bash
+npm run build
+npm exec vite -- --open /examples/react-leaderboard/
+```
+
+Then open `http://localhost:5173/examples/react-leaderboard/`.
+
+The example lives in [`examples/react-leaderboard`](./examples/react-leaderboard/) and uses:
+- `React` + `ReactDOM` in the browser
+- `WaveletClient` from the local browser SDK build
+- keyed row reconciliation by `player_id`
+
+**4. Subscribe from your app**
 
 ```bash
 npx wavelet generate   # generates .wavelet/client.ts with full types
@@ -249,7 +263,7 @@ function Leaderboard() {
 }
 ```
 
-**4. Write events**
+**5. Write events**
 
 ```typescript
 await wavelet.streams.game_events.emit({
@@ -270,10 +284,10 @@ Use [`examples/sdk-leaderboard`](./examples/sdk-leaderboard/):
 npm install
 npm run build
 node packages/cli/dist/index.js dev --config examples/sdk-leaderboard/wavelet.config.ts
-python3 -m http.server 4173
+npm exec vite -- --open /examples/sdk-leaderboard/
 ```
 
-Then open `http://localhost:4173/examples/sdk-leaderboard/`.
+Then open `http://localhost:5173/examples/sdk-leaderboard/`.
 
 The page imports the browser ESM build from `packages/sdk/browser/index.browser.js` and demonstrates:
 - `client.view('leaderboard').get()`
@@ -290,15 +304,15 @@ Use [`examples/react-leaderboard`](./examples/react-leaderboard/):
 ```bash
 npm run build
 node packages/cli/dist/index.js dev --config examples/react-leaderboard/wavelet.config.ts
-python3 -m http.server 4173
+npm exec vite -- --open /examples/react-leaderboard/
 ```
 
-Then open `http://localhost:4173/examples/react-leaderboard/`.
+Then open `http://localhost:5173/examples/react-leaderboard/`.
 
 This example:
 - loads `React` and `ReactDOM` from `esm.sh`
-- imports the local browser SDK build from `packages/sdk/browser/index.browser.js`
-- uses React state updates to render leaderboard diffs without manual DOM patching
+- imports `initWavelet()` and `useWavelet()` from `packages/sdk/browser/react.js`
+- uses the SDK React hooks for the initial fetch and live updates
 
 ## Agent Integration (MCP)
 

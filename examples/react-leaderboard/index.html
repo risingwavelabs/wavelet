@@ -244,11 +244,10 @@
   <script type="module">
     import React from 'https://esm.sh/react@18'
     import { createRoot } from 'https://esm.sh/react-dom@18/client'
-    import { WaveletClient } from '../../packages/sdk/browser/index.browser.js'
+    import { initWavelet, useWavelet, getClient } from '../../packages/sdk/browser/react.js'
 
-    const client = new WaveletClient({ url: 'http://localhost:8080' })
-    const leaderboardView = client.view('leaderboard')
-    const gameEvents = client.stream('game_events')
+    initWavelet({ url: 'http://localhost:8080' })
+    const gameEvents = getClient().stream('game_events')
     const players = ['alice', 'bob', 'charlie', 'dave', 'eve', 'frank', 'grace', 'heidi']
 
     const e = React.createElement
@@ -307,11 +306,11 @@
     }
 
     function App() {
-      const [rows, setRows] = React.useState([])
-      const [status, setStatus] = React.useState({ kind: '', label: 'Connecting' })
       const [logs, setLogs] = React.useState([])
       const [pending, setPending] = React.useState(false)
       const [highlighted, setHighlighted] = React.useState(new Set())
+      const previousRowsRef = React.useRef([])
+      const { data: rows, isLoading, error } = useWavelet('leaderboard', { keyBy: 'player_id' })
 
       const addLog = React.useCallback((message, detail = '') => {
         const time = new Date().toLocaleTimeString()
@@ -319,70 +318,64 @@
       }, [])
 
       React.useEffect(() => {
-        let cancelled = false
+        if (isLoading) {
+          return
+        }
 
-        leaderboardView.get()
-          .then((initialRows) => {
-            if (cancelled) return
-            initialRows.sort((a, b) => Number(b.total_score || 0) - Number(a.total_score || 0))
-            setRows(initialRows)
-            addLog('Fetched initial leaderboard', `${initialRows.length} row(s)`)
-          })
-          .catch((error) => {
-            if (cancelled) return
-            setStatus({ kind: 'error', label: 'Fetch Error' })
-            addLog('Initial fetch failed', error.message)
-          })
+        const previousRows = previousRowsRef.current
+        const previousMap = new Map(previousRows.map((row) => [row.player_id, row]))
+        const changed = new Set()
 
-        const unsubscribe = leaderboardView.subscribe({
-          onOpen() {
-            if (cancelled) return
-            setStatus({ kind: 'live', label: 'Live' })
-            addLog('WebSocket connected')
-          },
-          onData(diff) {
-            if (cancelled) return
+        for (const row of rows) {
+          const prev = previousMap.get(row.player_id)
+          if (!prev) {
+            changed.add(row.player_id)
+            continue
+          }
 
-            setRows((current) => {
-              const next = new Map(current.map((row) => [row.player_id, row]))
+          if (
+            Number(prev.total_score || 0) !== Number(row.total_score || 0) ||
+            Number(prev.games_played || 0) !== Number(row.games_played || 0)
+          ) {
+            changed.add(row.player_id)
+          }
+        }
 
-              for (const row of diff.deleted) next.delete(row.player_id)
-              for (const row of diff.inserted) next.set(row.player_id, row)
-              for (const row of diff.updated) next.set(row.player_id, row)
+        if (previousRows.length === 0) {
+          addLog('Fetched initial leaderboard', `${rows.length} row(s)`)
+        } else if (changed.size > 0) {
+          addLog('Received update', `${changed.size} player(s) changed`)
+        }
 
-              return Array.from(next.values()).sort(
-                (a, b) => Number(b.total_score || 0) - Number(a.total_score || 0)
-              )
-            })
+        previousRowsRef.current = rows
 
-            const changed = new Set([
-              ...diff.inserted.map((row) => row.player_id),
-              ...diff.updated.map((row) => row.player_id),
-            ])
-
-            setHighlighted(changed)
-            window.clearTimeout(App.highlightTimer)
-            App.highlightTimer = window.setTimeout(() => setHighlighted(new Set()), 420)
-            addLog('Received diff', `+${diff.inserted.length} ~${diff.updated.length} -${diff.deleted.length}`)
-          },
-          onReconnect() {
-            if (cancelled) return
-            setStatus({ kind: '', label: 'Reconnecting' })
-            addLog('Subscription reconnecting')
-          },
-          onError(error) {
-            if (cancelled) return
-            setStatus({ kind: 'error', label: 'Subscription Error' })
-            addLog('Subscription error', error.message)
-          },
-        })
+        if (changed.size > 0) {
+          setHighlighted(changed)
+          window.clearTimeout(App.highlightTimer)
+          App.highlightTimer = window.setTimeout(() => setHighlighted(new Set()), 420)
+        }
 
         return () => {
-          cancelled = true
-          unsubscribe()
           window.clearTimeout(App.highlightTimer)
         }
-      }, [addLog])
+      }, [rows, isLoading, addLog])
+
+      React.useEffect(() => {
+        if (error) {
+          addLog('Subscription error', error.message)
+        }
+      }, [error, addLog])
+
+      const status = error
+        ? { kind: 'error', label: 'Subscription Error' }
+        : isLoading
+          ? { kind: '', label: 'Connecting' }
+          : { kind: 'live', label: 'Live' }
+
+      const sortedRows = React.useMemo(
+        () => [...rows].sort((a, b) => Number(b.total_score || 0) - Number(a.total_score || 0)),
+        [rows]
+      )
 
       async function emitRandomScore() {
         setPending(true)
@@ -416,11 +409,11 @@
       }
 
       return e('div', { className: 'app' }, [
-        e('section', { key: 'hero', className: 'hero' }, [
+          e('section', { key: 'hero', className: 'hero' }, [
           e('div', { key: 'eyebrow', className: 'eyebrow' }, 'Wavelet React Example'),
           e('h1', { key: 'title' }, 'Leaderboard with React diffing'),
           e('p', { key: 'lede', className: 'lede' },
-            'This example uses React state updates for the table and the browser ESM build of WaveletClient for reads, subscriptions, and event writes. The table rows stay stable because React reconciles them by player id.'
+            'This example uses the SDK React helpers directly: initWavelet() sets up a shared client, and useWavelet() handles the initial fetch plus live subscription updates.'
           ),
         ]),
         e('section', { key: 'layout', className: 'layout' }, [
@@ -429,7 +422,7 @@
               e('div', { key: 'title', className: 'panel-title' }, 'Live Leaderboard'),
               e(StatusBadge, { key: 'status', status }),
             ]),
-            e(LeaderboardTable, { key: 'content', rows, highlighted }),
+            e(LeaderboardTable, { key: 'content', rows: sortedRows, highlighted }),
           ]),
           e('aside', { key: 'sidebar', className: 'sidebar' }, [
             e('section', { key: 'controls', className: 'panel' }, [
@@ -437,7 +430,7 @@
                 e('div', { className: 'panel-title' }, 'Controls')
               ),
               e('div', { key: 'controls', className: 'controls' }, [
-                e('p', { key: 'body' }, 'React handles DOM diffing here, while Wavelet pushes view diffs over WebSocket.'),
+                e('p', { key: 'body' }, 'React handles DOM diffing here, while useWavelet() handles the fetch + WebSocket subscription lifecycle.'),
                 e('button', {
                   key: 'single',
                   className: 'primary',
@@ -452,7 +445,7 @@
                 }, pending ? 'Sending...' : 'Emit Batch of 10'),
               ]),
               e('div', { key: 'meta', className: 'meta' }, [
-                e('p', { key: 'sdk' }, e('code', null, "import { WaveletClient } from '../../packages/sdk/browser/index.browser.js'")),
+                e('p', { key: 'sdk' }, e('code', null, "import { initWavelet, useWavelet } from '../../packages/sdk/browser/react.js'")),
                 e('p', { key: 'react' }, 'React and ReactDOM are loaded from esm.sh for this zero-build example.'),
               ]),
             ]),
