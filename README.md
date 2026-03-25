@@ -172,7 +172,14 @@ The order lands in the `orders` stream. A downstream view tracks open positions.
 
 ## Quick Start
 
+Wavelet requires [RisingWave](https://github.com/risingwavelabs/risingwave) as its backend. `wavelet dev` will auto-start it if you have the binary or Docker installed:
+
 ```bash
+# Install RisingWave (pick one)
+brew tap risingwavelabs/risingwave && brew install risingwave
+# or: docker pull risingwavelabs/risingwave:latest
+
+# Install Wavelet
 npm install @risingwave/wavelet
 ```
 

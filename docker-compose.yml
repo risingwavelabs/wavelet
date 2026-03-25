@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   risingwave:
     image: risingwavelabs/risingwave:latest
@@ -7,10 +5,11 @@ services:
     ports:
       - "4566:4566"
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "4566"]
+      test: ["CMD", "curl", "-sf", "http://localhost:5691/"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 30
+      start_period: 10s
 
   wavelet:
     build:
