@@ -125,6 +125,11 @@
       padding: 8px 0 10px;
     }
 
+    .table-shell {
+      position: relative;
+      min-height: 240px;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -243,6 +248,22 @@
       text-align: center;
     }
 
+    .table-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
+      color: var(--muted);
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .table-empty[hidden] {
+      display: none;
+    }
+
     @media (max-width: 860px) {
       .layout {
         grid-template-columns: 1fr;
@@ -271,21 +292,20 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th class="rank">#</th>
-                <th>Player</th>
-                <th>Score</th>
-                <th>Games</th>
-              </tr>
-            </thead>
-            <tbody id="tbody">
-              <tr>
-                <td colspan="4" class="empty">Waiting for Wavelet data...</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="table-shell">
+            <div class="table-empty" id="table-empty">Waiting for Wavelet data...</div>
+            <table>
+              <thead>
+                <tr>
+                  <th class="rank">#</th>
+                  <th>Player</th>
+                  <th>Score</th>
+                  <th>Games</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </div>
         </div>
       </article>
 
@@ -329,9 +349,9 @@ await client.stream('game_events').emit({...})</div>
 
     let leaderboard = []
     const rowNodes = new Map()
-    let emptyRow = null
 
     const tbody = document.getElementById('tbody')
+    const emptyStateEl = document.getElementById('table-empty')
     const logEl = document.getElementById('log')
     const statusEl = document.getElementById('status')
     const statusTextEl = document.getElementById('status-text')
@@ -369,25 +389,22 @@ await client.stream('game_events').emit({...})</div>
       return row
     }
 
-    function ensureEmptyRow(message) {
-      rowNodes.clear()
-      if (!emptyRow) {
-        emptyRow = document.createElement('tr')
-        emptyRow.innerHTML = '<td colspan="4" class="empty"></td>'
-      }
-      emptyRow.querySelector('.empty').textContent = message
-      tbody.replaceChildren(emptyRow)
+    function setEmptyState(message) {
+      emptyStateEl.textContent = message
+      emptyStateEl.hidden = false
     }
 
     function render(flashPlayers = new Set()) {
       if (leaderboard.length === 0) {
-        ensureEmptyRow('No scores yet. Emit a score to get started.')
+        for (const [, row] of rowNodes) {
+          row.remove()
+        }
+        rowNodes.clear()
+        setEmptyState('No scores yet. Emit a score to get started.')
         return
       }
 
-      if (tbody.querySelector('.empty')) {
-        tbody.replaceChildren()
-      }
+      emptyStateEl.hidden = true
 
       const rows = [...leaderboard].sort((a, b) => Number(b.total_score || 0) - Number(a.total_score || 0))
       const visiblePlayers = new Set(rows.map((row) => row.player_id))
