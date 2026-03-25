@@ -66,11 +66,11 @@ jobs:
 
       - name: Build packages
         run: |
-          npx tsc --build packages/config/tsconfig.json
-          npx tsc --build packages/server/tsconfig.json
-          npx tsc --build packages/sdk/tsconfig.json
-          npx tsc --build packages/cli/tsconfig.json
-          npx tsc --build packages/mcp/tsconfig.json
+          npm run build --workspace=packages/config
+          npm run build --workspace=packages/server
+          npm run build --workspace=packages/sdk
+          npm run build --workspace=packages/cli
+          npm run build --workspace=packages/mcp
 
       - name: Run tests
         run: npx vitest run
