@@ -228,13 +228,17 @@ App / Agent  <-  WebSocket  <-  Wavelet Server  <-  SQL cursor  <-  RisingWave
                                 + fan-out                       computation
 ```
 
-**Stateless server.** Wavelet holds no persistent state. Cursor positions are in memory and recover from RisingWave's subscription retention window on restart.
+**Write path.** `POST /v1/streams/{name}` inserts directly into RisingWave. No queue, no buffer. 200 means the row is persisted. RisingWave recomputes affected views on its next barrier cycle (~1s by default), and Wavelet pushes the diff to subscribers. End-to-end latency from write to client update is typically 1-2 seconds.
+
+**Stateless server.** Wavelet holds no persistent state. Cursor positions are in memory. On restart, cursors recover from RisingWave's subscription retention window (default 24h). During recovery, clients may receive duplicate diffs -- applications should handle updates idempotently (e.g. key by primary key, not append).
 
 **Single cursor per view.** One subscription cursor feeds all connected clients. 1 client or 10,000 -- same RisingWave load.
 
 **Config-driven DDL.** `wavelet.config.ts` is the source of truth. `wavelet dev` and `wavelet push` diff config against RisingWave and apply minimal changes (create/drop tables, materialized views, subscriptions).
 
-**JWT-scoped delivery.** Views with `filterBy` match the column value against a JWT claim. Filtering is enforced server-side -- clients cannot override it.
+**JWT-scoped delivery.** Views with `filterBy` match the column value against a JWT claim. Filtering is enforced server-side -- clients cannot override it. Views without `filterBy` broadcast all rows to all clients. For multi-tenant applications, omitting `filterBy` on a tenant-scoped view is a data leak -- Wavelet does not enforce this automatically.
+
+**Failure modes.** If RisingWave goes down, cursor fetch returns an error and Wavelet retries after 1 second. Clients stay connected but receive no diffs until RisingWave recovers. If a WebSocket disconnects, the SDK reconnects with exponential backoff (1s to 30s) and resumes from the last cursor position. Each view has its own cursor and connection -- a slow view does not block other views.
 
 ## CLI
 

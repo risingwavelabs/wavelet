@@ -182,17 +182,37 @@ async function main() {
     }
   )
 
-  // Tool: run_sql - Execute a read-only SQL query (for advanced use)
+  // Tool: run_sql - Execute a read-only SQL query (scoped to known tables)
+  const allowedTables = [...views, ...streams]
   server.tool(
     'run_sql',
-    'Execute a read-only SQL query against the Wavelet database. Use this for ad-hoc queries that go beyond what query_view provides. Only SELECT statements are allowed.',
+    `Execute a read-only SQL query. Only SELECT statements are allowed, and queries may only reference known views and streams: ${allowedTables.join(', ')}.`,
     {
       sql: z.string().describe('SQL SELECT query to execute'),
     },
     async ({ sql }) => {
-      if (!sql.trim().toLowerCase().startsWith('select')) {
+      const normalized = sql.trim().toLowerCase()
+
+      if (!normalized.startsWith('select')) {
         return {
           content: [{ type: 'text' as const, text: 'Only SELECT queries are allowed. Use emit_event to write data.' }],
+          isError: true,
+        }
+      }
+
+      // Check that the query only references allowed tables
+      // Extract identifiers from FROM and JOIN clauses
+      const fromJoinPattern = /\b(?:from|join)\s+([a-z_][a-z0-9_]*)/gi
+      let match
+      const referencedTables: string[] = []
+      while ((match = fromJoinPattern.exec(normalized)) !== null) {
+        referencedTables.push(match[1])
+      }
+
+      const disallowed = referencedTables.filter(t => !allowedTables.includes(t))
+      if (disallowed.length > 0) {
+        return {
+          content: [{ type: 'text' as const, text: `Query references tables not managed by Wavelet: ${disallowed.join(', ')}. Allowed tables: ${allowedTables.join(', ')}` }],
           isError: true,
         }
       }
