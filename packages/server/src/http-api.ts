@@ -139,6 +139,11 @@ export class HttpApi {
       return
     }
 
+    if (events.length === 0) {
+      this.json(res, 200, { ok: true, count: 0 })
+      return
+    }
+
     const client = await this.ensureClient()
     const columns = Object.keys(stream.columns)
 
