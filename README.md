@@ -8,99 +8,39 @@
 
 **The reactive backend for agents and apps.**
 
-Write a SQL query. Subscribe to its result from your app or AI agent. When the underlying data changes, Wavelet pushes the recomputed result to every subscriber.
+Your app shouldn't poll for answers. Answers should flow to your app.
+
+Wavelet lets you define a computation in SQL and subscribe to its result. When the underlying data changes, every connected app and AI agent receives the updated result automatically. No API to build, no cache to manage, no WebSocket to wire up.
+
+```typescript
+// Define what to compute
+views: {
+  revenue: {
+    query: sql`SELECT tenant_id, SUM(amount) AS total FROM orders GROUP BY tenant_id`,
+    filterBy: 'tenant_id',
+  }
+}
+
+// Subscribe from your app
+const { data } = useWavelet('revenue')
+// data updates automatically. Each tenant sees only their own numbers.
+```
 
 Built on [RisingWave](https://github.com/risingwavelabs/risingwave). By the RisingWave team.
-
-## What Wavelet Does
-
-Most real-time tools push **row changes** -- "a row was inserted into the orders table." Wavelet pushes **computed results** -- "revenue for tenant A is now $12,450."
-
-You define the computation as a SQL materialized view. RisingWave maintains it incrementally. Wavelet fans out diffs to connected clients over WebSocket, filtered per tenant via JWT claims.
-
-```
-Events in -> RisingWave (incremental SQL) -> Wavelet (fan-out + JWT filter) -> Your app / AI agent
-```
 
 ## Use Cases
 
 ### Real-time SaaS Dashboards
 
-Your customers log in and see their own metrics updating live. Revenue, active users, API usage -- computed server-side, pushed per-tenant, no polling.
-
-```typescript
-streams: {
-  orders: {
-    columns: {
-      tenant_id: 'string', amount: 'float',
-      product_id: 'string', ts: 'timestamp',
-    }
-  }
-},
-
-views: {
-  tenant_revenue: {
-    query: sql`
-      SELECT tenant_id,
-             SUM(amount) AS total_revenue,
-             COUNT(*) AS order_count,
-             SUM(amount) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS revenue_24h
-      FROM orders GROUP BY tenant_id
-    `,
-    filterBy: 'tenant_id',
-  }
-}
-```
-
-A client with `{ tenant_id: "acme" }` in their JWT sees only Acme's numbers. One view, thousands of tenants, each isolated by JWT. The alternative is writing a polling endpoint, a caching layer, and a per-tenant authorization check -- Wavelet replaces all three.
+Your customers log in and see their own metrics updating live -- revenue, active users, API usage. One view definition, thousands of tenants, each isolated by JWT. Replaces a polling endpoint + cache + per-tenant auth check.
 
 ### Usage Metering and Billing
 
-Every API call, every token, every GPU second -- streamed in, aggregated per customer, pushed to dashboards and enforcement layers in real time.
-
-```typescript
-streams: {
-  api_calls: {
-    columns: {
-      customer_id: 'string', model: 'string',
-      tokens: 'int', cost_usd: 'float',
-    }
-  }
-},
-
-views: {
-  customer_usage: {
-    query: sql`
-      SELECT customer_id,
-             SUM(tokens) AS total_tokens,
-             SUM(cost_usd) AS total_cost,
-             COUNT(*) AS total_requests
-      FROM api_calls GROUP BY customer_id
-    `,
-    filterBy: 'customer_id',
-  }
-}
-```
-
-Your customer-facing usage page subscribes via WebSocket. Your rate limiter reads the same view via HTTP. Same source of truth, no sync issues.
+Stream API calls, aggregate tokens and cost per customer, push to both customer-facing dashboards and rate limiters. Same source of truth, no sync issues.
 
 ### Agent Watchdogs
 
-AI agents subscribe to computed views via MCP and act when conditions are met. The agent receives only the exceptions, not the firehose.
-
-```typescript
-views: {
-  sla_violations: sql`
-    SELECT order_id, customer_id,
-           fulfillment_time_mins,
-           fulfillment_time_mins - 120 AS overdue_by_mins
-    FROM order_status
-    WHERE fulfillment_time_mins > 120
-  `
-}
-```
-
-An agent subscribes to `sla_violations` via MCP. When a new row appears, the agent escalates. When the issue is resolved, the row disappears from the view and the agent sees the delete diff. No polling, no cron, no stale alerts.
+AI agents subscribe to computed views via MCP. An agent watches `sla_violations` -- rows appear when an order exceeds its SLA, disappear when resolved. The agent acts on exceptions, not the firehose. No polling, no cron.
 
 ## Quick Start
 
