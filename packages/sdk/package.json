@@ -15,16 +15,21 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./browser": {
+      "import": "./browser/index.browser.js",
+      "default": "./browser/index.browser.js"
+    },
     "./react": {
       "types": "./dist/react.d.ts",
       "import": "./dist/react.js"
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "browser"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc -p tsconfig.browser.json",
     "dev": "tsc --watch"
   },
   "peerDependencies": {

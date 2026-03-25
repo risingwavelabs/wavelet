@@ -21,6 +21,7 @@ export interface StreamHandle<T = Record<string, unknown>> {
 }
 
 export interface SubscribeHandlers<T> {
+  onOpen?: () => void
   onData: (diff: Diff<T>) => void
   onError?: (error: WaveletError) => void
   onReconnect?: () => void
