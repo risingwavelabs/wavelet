@@ -288,14 +288,7 @@ AI agents query views and write events as tool calls.
 
 ## Agent Onboarding
 
-This repo includes a [skill file](.claude/skills/wavelet/SKILL.md) that teaches AI coding agents (Claude Code, Cursor, etc.) how to work with Wavelet. When an agent opens a project that depends on `@risingwave/wavelet`, it automatically learns:
-
-- How to write `wavelet.config.ts` (streams, views, filterBy, CDC sources)
-- CLI commands (`wavelet dev`, `wavelet push`, `wavelet generate`)
-- SDK usage (React hooks, TypeScript client, subscribe/emit)
-- SQL patterns for views (aggregations, window functions, threshold alerts, joins)
-
-No manual prompting needed. The agent can set up streams, add views, generate typed clients, and configure MCP integration out of the box.
+This repo includes a [skill file](.claude/skills/wavelet/SKILL.md) for AI coding agents. Agents that support the [Agent Skills](https://agentskills.io) standard (Claude Code, Cursor, etc.) automatically learn how to write configs, use the CLI, and integrate the SDK.
 
 ## How It Works
 
