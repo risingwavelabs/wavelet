@@ -261,17 +261,6 @@ POST /v1/streams/{name}/batch    -> write batch of events
 WS   /subscribe/{name}           -> real-time diffs
 ```
 
-## Project Structure
-
-```
-packages/
-  config/    ->  @risingwave/wavelet         defineConfig, sql tag, types
-  server/    ->  @risingwave/wavelet-server  WebSocket fan-out, cursor polling, JWT, HTTP API
-  sdk/       ->  @risingwave/wavelet-sdk     TypeScript client + React hooks
-  cli/       ->  @risingwave/wavelet-cli     CLI (init, dev, push, generate)
-  mcp/       ->  @risingwave/wavelet-mcp     MCP server for AI agents
-```
-
 ## License
 
 Apache 2.0. See [LICENSE](./LICENSE).
