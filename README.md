@@ -38,9 +38,9 @@ Your customers log in and see their own metrics updating live -- revenue, active
 
 Stream API calls, aggregate tokens and cost per customer, push to both customer-facing dashboards and rate limiters. Same source of truth, no sync issues.
 
-### Agent Watchdogs
+### Proactive Agents
 
-AI agents subscribe to computed views via MCP. An agent watches `sla_violations` -- rows appear when an order exceeds its SLA, disappear when resolved. The agent acts on exceptions, not the firehose. No polling, no cron.
+AI agents subscribe to computed views via MCP and act autonomously when conditions change. An agent watches `sla_violations` -- rows appear when an order exceeds its SLA, disappear when resolved. The agent escalates, notifies, or triggers a remediation. No polling, no cron -- the agent reacts to computed state, not raw events.
 
 ## Quick Start
 
