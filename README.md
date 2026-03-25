@@ -3,10 +3,11 @@
 [![Slack](https://badgen.net/badge/Slack/Join%20RisingWave/0abd59?icon=slack)](https://go.risingwave.com/slack)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![npm](https://img.shields.io/npm/v/@risingwave/wavelet)](https://www.npmjs.com/package/@risingwave/wavelet)
+[![SKILL.md](https://img.shields.io/badge/SKILL.md-agent%20onboarding-black)](.claude/skills/wavelet/SKILL.md)
 
 **The reactive backend for agents and apps.**
 
-Write a SQL query. Subscribe to its result from a React component or an AI agent. When the underlying data changes, Wavelet pushes the recomputed result to every subscriber.
+Write a SQL query. Subscribe to its result from your app or AI agent. When the underlying data changes, Wavelet pushes the recomputed result to every subscriber.
 
 Built on [RisingWave](https://github.com/risingwavelabs/risingwave). By the RisingWave team.
 
@@ -288,7 +289,7 @@ AI agents query views and write events as tool calls.
 
 ## Agent Onboarding
 
-This repo includes a [skill file](.claude/skills/wavelet/SKILL.md) for AI coding agents. Agents that support the [Agent Skills](https://agentskills.io) standard (Claude Code, Cursor, etc.) automatically learn how to write configs, use the CLI, and integrate the SDK.
+Read [SKILL.md](.claude/skills/wavelet/SKILL.md) and follow the instructions to set up and use Wavelet.
 
 ## How It Works
 
