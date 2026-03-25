@@ -142,14 +142,24 @@ export class HttpApi {
     const client = await this.ensureClient()
     const columns = Object.keys(stream.columns)
 
-    for (const data of events) {
-      const values = columns.map((col) => data[col])
-      const placeholders = columns.map((_, i) => `$${i + 1}`)
-      await client.query(
-        `INSERT INTO ${streamName} (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`,
-        values
-      )
+    // Build a single INSERT with multiple VALUE rows
+    const allValues: unknown[] = []
+    const rowPlaceholders: string[] = []
+
+    for (let i = 0; i < events.length; i++) {
+      const row = events[i]
+      const offset = i * columns.length
+      const ph = columns.map((_, j) => `$${offset + j + 1}`)
+      rowPlaceholders.push(`(${ph.join(', ')})`)
+      for (const col of columns) {
+        allValues.push(row[col])
+      }
     }
+
+    await client.query(
+      `INSERT INTO ${streamName} (${columns.join(', ')}) VALUES ${rowPlaceholders.join(', ')}`,
+      allValues
+    )
 
     this.json(res, 200, { ok: true, count: events.length })
   }
