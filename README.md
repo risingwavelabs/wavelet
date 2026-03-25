@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/@risingwave/wavelet)](https://www.npmjs.com/package/@risingwave/wavelet)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 [![Slack](https://badgen.net/badge/Slack/Join%20RisingWave/0abd59?icon=slack)](https://go.risingwave.com/slack)
-[![SKILL.md](https://img.shields.io/badge/SKILL.md-agent%20onboarding-black)](.agents/skills/wavelet/SKILL.md)
+[![SKILL.md](https://img.shields.io/badge/SKILL.md-agent%20onboarding-black)](skills/wavelet/SKILL.md)
 
 **The reactive backend for agents and apps.**
 
@@ -157,7 +157,11 @@ AI agents query views and write events as tool calls.
 
 ## Agent Onboarding
 
-Read [SKILL.md](.agents/skills/wavelet/SKILL.md) and follow the instructions to set up and use Wavelet.
+```bash
+npx skills add risingwavelabs/wavelet
+```
+
+Or read [SKILL.md](skills/wavelet/SKILL.md) directly.
 
 ## Architecture
 

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "wavelet-skills",
+  "description": "Official Wavelet skills for AI coding agents",
+  "owner": {
+    "name": "RisingWave Labs",
+    "email": "info@risingwave-labs.com"
+  },
+  "metadata": {
+    "version": "0.1.4",
+    "description": "Teaches AI agents how to set up Wavelet projects, write configs, use the SDK, and configure MCP integration"
+  },
+  "plugins": [
+    {
+      "name": "wavelet",
+      "description": "Set up and configure Wavelet -- the reactive backend for agents and apps. Define streams, SQL views, JWT filtering, React hooks, TypeScript client, and MCP integration.",
+      "version": "0.1.4",
+      "author": { "name": "RisingWave Labs", "email": "info@risingwave-labs.com" },
+      "source": "./skills/wavelet",
+      "homepage": "https://github.com/risingwavelabs/wavelet",
+      "repository": "https://github.com/risingwavelabs/wavelet",
+      "license": "Apache-2.0",
+      "category": "backend",
+      "keywords": ["wavelet", "risingwave", "real-time", "reactive", "streaming", "sql", "websocket", "mcp"]
+    }
+  ]
+}
