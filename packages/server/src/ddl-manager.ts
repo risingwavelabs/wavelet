@@ -359,20 +359,21 @@ export class DdlManager {
 
     const parsed = parsePostgresUrl(source.connection)
 
+    const esc = (s: string) => s.replace(/'/g, "''")
     try {
       await this.client!.query(`
         CREATE TABLE IF NOT EXISTS ${cdcTableName} (*)
         WITH (
           connector = 'postgres-cdc',
-          hostname = '${parsed.host}',
-          port = '${parsed.port}',
-          username = '${parsed.user}',
-          password = '${parsed.password}',
-          database.name = '${parsed.database}',
-          schema.name = '${parsed.schema}',
-          table.name = '${tableName}',
-          slot.name = '${slotName}',
-          publication.name = '${pubName}'
+          hostname = '${esc(parsed.host)}',
+          port = '${esc(parsed.port)}',
+          username = '${esc(parsed.user)}',
+          password = '${esc(parsed.password)}',
+          database.name = '${esc(parsed.database)}',
+          schema.name = '${esc(parsed.schema)}',
+          table.name = '${esc(tableName)}',
+          slot.name = '${esc(slotName)}',
+          publication.name = '${esc(pubName)}'
         )
       `)
       console.log(`[ddl-manager] Created CDC source: ${cdcTableName} (from ${parsed.host}/${parsed.database}.${tableName})`)

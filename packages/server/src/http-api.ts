@@ -1,16 +1,20 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import pg from 'pg'
 import type { StreamDef, ViewDef, SqlFragment } from '@risingwave/wavelet'
+import type { JwtVerifier, JwtClaims } from './jwt.js'
 
-const { Client } = pg
+const { Pool } = pg
+
+const MAX_BODY_SIZE = 10 * 1024 * 1024 // 10MB
 
 export class HttpApi {
-  private client: InstanceType<typeof Client> | null = null
+  private pool: InstanceType<typeof Pool> | null = null
 
   constructor(
     private connectionString: string,
     private streams: Record<string, StreamDef>,
-    private views: Record<string, ViewDef | SqlFragment>
+    private views: Record<string, ViewDef | SqlFragment>,
+    private jwt?: JwtVerifier
   ) {}
 
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -45,7 +49,7 @@ export class HttpApi {
       // GET /v1/views/{name}
       const viewMatch = url.pathname.match(/^\/v1\/views\/([^/]+)$/)
       if (viewMatch && req.method === 'GET') {
-        await this.handleRead(viewMatch[1], url, res)
+        await this.handleRead(viewMatch[1], url, req, res)
         return
       }
 
@@ -85,12 +89,11 @@ export class HttpApi {
     }
   }
 
-  private async ensureClient(): Promise<InstanceType<typeof Client>> {
-    if (!this.client) {
-      this.client = new Client({ connectionString: this.connectionString })
-      await this.client.connect()
+  private ensurePool(): InstanceType<typeof Pool> {
+    if (!this.pool) {
+      this.pool = new Pool({ connectionString: this.connectionString, max: 10 })
     }
-    return this.client
+    return this.pool
   }
 
   private async handleWrite(streamName: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -107,12 +110,12 @@ export class HttpApi {
     const body = await this.readBody(req)
     const data = JSON.parse(body)
 
-    const client = await this.ensureClient()
+    const pool = this.ensurePool()
     const columns = Object.keys(stream.columns)
     const values = columns.map((col) => data[col])
     const placeholders = columns.map((_, i) => `$${i + 1}`)
 
-    await client.query(
+    await pool.query(
       `INSERT INTO ${streamName} (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`,
       values
     )
@@ -144,7 +147,7 @@ export class HttpApi {
       return
     }
 
-    const client = await this.ensureClient()
+    const pool = this.ensurePool()
     const columns = Object.keys(stream.columns)
 
     // Build a single INSERT with multiple VALUE rows
@@ -161,7 +164,7 @@ export class HttpApi {
       }
     }
 
-    await client.query(
+    await pool.query(
       `INSERT INTO ${streamName} (${columns.join(', ')}) VALUES ${rowPlaceholders.join(', ')}`,
       allValues
     )
@@ -169,7 +172,7 @@ export class HttpApi {
     this.json(res, 200, { ok: true, count: events.length })
   }
 
-  private async handleRead(viewName: string, url: URL, res: ServerResponse): Promise<void> {
+  private async handleRead(viewName: string, url: URL, req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (!this.views[viewName]) {
       const available = Object.keys(this.views)
       this.json(res, 404, {
@@ -179,14 +182,54 @@ export class HttpApi {
       return
     }
 
-    const client = await this.ensureClient()
+    // JWT verification for views with filterBy
+    const viewDef = this.views[viewName]
+    const filterBy = this.getFilterBy(viewDef)
 
-    // Build WHERE clause from query params
+    let claims: JwtClaims | null = null
+    if (filterBy && this.jwt?.isConfigured()) {
+      const token = url.searchParams.get('token')
+        ?? req.headers.authorization?.replace('Bearer ', '')
+
+      if (!token) {
+        this.json(res, 401, { error: 'Authentication required for filtered views.' })
+        return
+      }
+
+      claims = await this.jwt.verify(token)
+    }
+
+    const pool = this.ensurePool()
+
+    // Build WHERE clause: start with filterBy if applicable
     const params: string[] = []
     const values: unknown[] = []
+
+    if (filterBy && claims) {
+      const claimValue = claims[filterBy]
+      if (claimValue === undefined) {
+        // No matching claim -- return empty result, not all data
+        this.json(res, 200, { view: viewName, rows: [] })
+        return
+      }
+      values.push(String(claimValue))
+      params.push(`${filterBy} = $${values.length}`)
+    }
+
+    // Add query params as additional filters, validating column names
+    const knownColumns = this.getViewColumns(viewDef)
     for (const [key, value] of url.searchParams.entries()) {
-      params.push(`${key} = $${params.length + 1}`)
+      if (key === 'token') continue // skip JWT token param
+      if (knownColumns && !knownColumns.includes(key)) {
+        this.json(res, 400, { error: `Unknown column '${key}'. Known columns: ${knownColumns.join(', ')}` })
+        return
+      }
+      if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+        this.json(res, 400, { error: `Invalid column name: '${key}'` })
+        return
+      }
       values.push(value)
+      params.push(`${key} = $${values.length}`)
     }
 
     let sql = `SELECT * FROM ${viewName}`
@@ -194,8 +237,20 @@ export class HttpApi {
       sql += ` WHERE ${params.join(' AND ')}`
     }
 
-    const result = await client.query(sql, values)
+    const result = await pool.query(sql, values)
     this.json(res, 200, { view: viewName, rows: result.rows })
+  }
+
+  private getFilterBy(viewDef: ViewDef | SqlFragment): string | undefined {
+    if ('_tag' in viewDef && viewDef._tag === 'sql') return undefined
+    return (viewDef as ViewDef).filterBy
+  }
+
+  private getViewColumns(viewDef: ViewDef | SqlFragment): string[] | null {
+    if ('_tag' in viewDef && viewDef._tag === 'sql') return null
+    const vd = viewDef as ViewDef
+    if (vd.columns) return Object.keys(vd.columns)
+    return null
   }
 
   private json(res: ServerResponse, status: number, data: unknown): void {
@@ -206,7 +261,16 @@ export class HttpApi {
   private readBody(req: IncomingMessage): Promise<string> {
     return new Promise((resolve, reject) => {
       let body = ''
-      req.on('data', (chunk) => { body += chunk })
+      let size = 0
+      req.on('data', (chunk) => {
+        size += chunk.length
+        if (size > MAX_BODY_SIZE) {
+          req.destroy()
+          reject(new Error(`Request body exceeds ${MAX_BODY_SIZE / 1024 / 1024}MB limit`))
+          return
+        }
+        body += chunk
+      })
       req.on('end', () => resolve(body))
       req.on('error', reject)
     })

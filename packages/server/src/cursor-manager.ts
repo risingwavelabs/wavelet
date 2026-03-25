@@ -108,12 +108,12 @@ export class CursorManager {
 
         if (result.rows.length === 0) continue
 
-        // Got at least one row. Drain any remaining rows without blocking.
+        // Got at least one row. Drain any remaining rows with timeout.
         const allRows = [...result.rows]
         let more = true
         while (more) {
           const batch = await conn.query(
-            `FETCH 100 FROM ${cursorName}`
+            `FETCH 100 FROM ${cursorName} WITH (timeout = '1s')`
           )
           if (batch.rows.length > 0) {
             allRows.push(...batch.rows)

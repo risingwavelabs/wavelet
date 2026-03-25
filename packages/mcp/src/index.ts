@@ -165,19 +165,33 @@ async function main() {
       )
       const columnNames = cols.rows.map((r: any) => r.column_name)
 
-      let count = 0
-      for (const data of events) {
-        const values = columnNames.map((col: string) => data[col])
-        const placeholders = columnNames.map((_: string, i: number) => `$${i + 1}`)
-        await db.query(
-          `INSERT INTO ${stream} (${columnNames.join(', ')}) VALUES (${placeholders.join(', ')})`,
-          values
-        )
-        count++
+      if (events.length === 0) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, stream, count: 0 }) }],
+        }
       }
 
+      // Build a single INSERT with multiple VALUE rows
+      const allValues: unknown[] = []
+      const rowPlaceholders: string[] = []
+
+      for (let i = 0; i < events.length; i++) {
+        const data = events[i]
+        const offset = i * columnNames.length
+        const ph = columnNames.map((_: string, j: number) => `$${offset + j + 1}`)
+        rowPlaceholders.push(`(${ph.join(', ')})`)
+        for (const col of columnNames) {
+          allValues.push(data[col])
+        }
+      }
+
+      await db.query(
+        `INSERT INTO ${stream} (${columnNames.join(', ')}) VALUES ${rowPlaceholders.join(', ')}`,
+        allValues
+      )
+
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, stream, count }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, stream, count: events.length }) }],
       }
     }
   )

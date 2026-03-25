@@ -91,6 +91,15 @@ export class WebSocketFanout {
       this.subscribers.get(viewName)?.delete(subscriber)
     })
 
+    // Heartbeat: detect dead connections behind proxies/load balancers
+    const pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping()
+      }
+    }, 30000)
+    ws.on('close', () => clearInterval(pingInterval))
+    ws.on('pong', () => { /* connection alive */ })
+
     ws.send(JSON.stringify({ type: 'connected', view: viewName }))
   }
 
@@ -130,7 +139,10 @@ export class WebSocketFanout {
 
   private filterDiff(diff: ViewDiff, filterBy: string, claims: JwtClaims): ViewDiff {
     const claimValue = claims[filterBy]
-    if (claimValue === undefined) return diff
+    if (claimValue === undefined) {
+      // No matching claim -- return empty diff, not all data
+      return { cursor: diff.cursor, inserted: [], updated: [], deleted: [] }
+    }
 
     const filterFn = (row: Record<string, unknown>) =>
       String(row[filterBy]) === String(claimValue)

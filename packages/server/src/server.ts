@@ -16,7 +16,7 @@ export class WaveletServer {
     this.jwt = new JwtVerifier(config.jwt)
     this.cursorManager = new CursorManager(config.database, config.views ?? {})
     this.fanout = new WebSocketFanout(this.cursorManager, this.jwt, config.views ?? {})
-    this.httpApi = new HttpApi(config.database, config.streams ?? {}, config.views ?? {})
+    this.httpApi = new HttpApi(config.database, config.streams ?? {}, config.views ?? {}, this.jwt)
   }
 
   async start(): Promise<void> {
