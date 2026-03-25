@@ -260,6 +260,27 @@ await wavelet.streams.game_events.emit({
 // Leaderboard recomputes. All clients receive the diff.
 ```
 
+## SDK Example
+
+Want a minimal browser example that uses the SDK directly instead of hand-written `fetch` and `WebSocket` calls?
+
+Use [`examples/sdk-leaderboard`](./examples/sdk-leaderboard/):
+
+```bash
+npm install
+npm run build
+node packages/cli/dist/index.js dev --config examples/sdk-leaderboard/wavelet.config.ts
+python3 -m http.server 4173
+```
+
+Then open `http://localhost:4173/examples/sdk-leaderboard/`.
+
+The page imports the browser ESM build from `packages/sdk/browser/index.browser.js` and demonstrates:
+- `client.view('leaderboard').get()`
+- `client.view('leaderboard').subscribe(...)`
+- `client.stream('game_events').emit(...)`
+- `client.stream('game_events').emitBatch(...)`
+
 ## Agent Integration (MCP)
 
 AI agents query views and write events as tool calls.

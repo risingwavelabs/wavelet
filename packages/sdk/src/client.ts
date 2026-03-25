@@ -88,6 +88,7 @@ export class WaveletClient {
 
       ws.onopen = () => {
         reconnectAttempt = 0
+        handlers.onOpen?.()
       }
 
       ws.onmessage = (event) => {

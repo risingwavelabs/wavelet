@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wavelet SDK Leaderboard Demo</title>
+  <style>
+    :root {
+      --bg: #101523;
+      --panel: #151d31;
+      --panel-strong: #1b2740;
+      --border: #293654;
+      --text: #eef3ff;
+      --muted: #95a2c6;
+      --accent: #67d4ff;
+      --accent-soft: rgba(103, 212, 255, 0.16);
+      --success: #4ade80;
+      --danger: #fb7185;
+      --shadow: 0 20px 60px rgba(3, 8, 20, 0.45);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(103, 212, 255, 0.16), transparent 35%),
+        linear-gradient(180deg, #0b1020 0%, #101523 50%, #0d1320 100%);
+      color: var(--text);
+      padding: 32px 20px 48px;
+    }
+
+    .shell {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      display: grid;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.25rem);
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .lede {
+      max-width: 720px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
+      gap: 20px;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(27, 39, 64, 0.92), rgba(21, 29, 49, 0.96));
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 0 6px rgba(251, 113, 133, 0.12);
+    }
+
+    .status.connected .status-dot {
+      background: var(--success);
+      box-shadow: 0 0 0 6px rgba(74, 222, 128, 0.12);
+    }
+
+    .table-wrap {
+      padding: 8px 0 10px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 14px 20px;
+      text-align: left;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+
+    td {
+      border-top: 1px solid rgba(148, 163, 184, 0.08);
+      font-variant-numeric: tabular-nums;
+    }
+
+    tbody tr.flash {
+      animation: flash 0.6s ease-out;
+    }
+
+    @keyframes flash {
+      from { background: var(--accent-soft); }
+      to { background: transparent; }
+    }
+
+    .rank {
+      width: 60px;
+      color: var(--muted);
+    }
+
+    .score {
+      font-weight: 700;
+    }
+
+    .sidebar {
+      display: grid;
+      gap: 20px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+      padding: 20px;
+    }
+
+    .controls p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #7ae0ff, #4fc6f8);
+      color: #071120;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      box-shadow: 0 12px 24px rgba(79, 198, 248, 0.22);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button.secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+
+    .code {
+      padding: 0 20px 20px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .log {
+      max-height: 360px;
+      overflow: auto;
+      padding: 8px 0;
+    }
+
+    .log-entry {
+      padding: 12px 20px;
+      border-top: 1px solid rgba(148, 163, 184, 0.08);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .log-entry strong {
+      color: var(--text);
+    }
+
+    .empty {
+      padding: 32px 20px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    @media (max-width: 860px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="eyebrow">Wavelet SDK Example</div>
+      <h1>Leaderboard via <code>WaveletClient</code></h1>
+      <p class="lede">
+        This example uses <code>@risingwave/wavelet-sdk</code> directly in the browser for initial reads,
+        live subscriptions, and event writes. No hand-written <code>fetch</code> or <code>WebSocket</code> glue.
+      </p>
+    </section>
+
+    <section class="layout">
+      <article class="card">
+        <div class="card-header">
+          <div class="card-title">Live Leaderboard</div>
+          <div class="status" id="status">
+            <span class="status-dot"></span>
+            <span id="status-text">Connecting</span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="rank">#</th>
+                <th>Player</th>
+                <th>Score</th>
+                <th>Games</th>
+              </tr>
+            </thead>
+            <tbody id="tbody">
+              <tr>
+                <td colspan="4" class="empty">Waiting for Wavelet data...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <aside class="sidebar">
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">Controls</div>
+          </div>
+          <div class="controls">
+            <p>Each button writes to the <code>game_events</code> stream using the SDK.</p>
+            <button id="single-score">Emit Random Score</button>
+            <button class="secondary" id="batch-scores">Emit Batch of 10</button>
+          </div>
+          <div class="code">import { WaveletClient } from '../../packages/sdk/browser/index.browser.js'
+
+const client = new WaveletClient({ url: 'http://localhost:8080' })
+await client.view('leaderboard').get()
+client.view('leaderboard').subscribe({ onData })
+await client.stream('game_events').emit({...})</div>
+        </section>
+
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">Event Log</div>
+          </div>
+          <div class="log" id="log">
+            <div class="empty">No events yet.</div>
+          </div>
+        </section>
+      </aside>
+    </section>
+  </div>
+
+  <script type="module">
+    import { WaveletClient } from '../../packages/sdk/browser/index.browser.js'
+
+    const client = new WaveletClient({ url: 'http://localhost:8080' })
+    const leaderboardView = client.view('leaderboard')
+    const gameEvents = client.stream('game_events')
+    const players = ['alice', 'bob', 'charlie', 'dave', 'eve', 'frank', 'grace', 'heidi']
+
+    let leaderboard = []
+    const rowNodes = new Map()
+    let emptyRow = null
+
+    const tbody = document.getElementById('tbody')
+    const logEl = document.getElementById('log')
+    const statusEl = document.getElementById('status')
+    const statusTextEl = document.getElementById('status-text')
+
+    function setStatus(connected, text) {
+      statusEl.classList.toggle('connected', connected)
+      statusTextEl.textContent = text
+    }
+
+    function log(message, detail = '') {
+      const time = new Date().toLocaleTimeString()
+      const entry = document.createElement('div')
+      entry.className = 'log-entry'
+      entry.innerHTML = `<strong>[${time}]</strong> ${message}${detail ? ` ${detail}` : ''}`
+
+      if (logEl.querySelector('.empty')) {
+        logEl.innerHTML = ''
+      }
+
+      logEl.prepend(entry)
+    }
+
+    function getOrCreateRow(playerId) {
+      let row = rowNodes.get(playerId)
+      if (row) return row
+
+      row = document.createElement('tr')
+      row.innerHTML = `
+        <td class="rank"></td>
+        <td data-col="player"></td>
+        <td class="score" data-col="score"></td>
+        <td data-col="games"></td>
+      `
+      rowNodes.set(playerId, row)
+      return row
+    }
+
+    function ensureEmptyRow(message) {
+      rowNodes.clear()
+      if (!emptyRow) {
+        emptyRow = document.createElement('tr')
+        emptyRow.innerHTML = '<td colspan="4" class="empty"></td>'
+      }
+      emptyRow.querySelector('.empty').textContent = message
+      tbody.replaceChildren(emptyRow)
+    }
+
+    function render(flashPlayers = new Set()) {
+      if (leaderboard.length === 0) {
+        ensureEmptyRow('No scores yet. Emit a score to get started.')
+        return
+      }
+
+      if (tbody.querySelector('.empty')) {
+        tbody.replaceChildren()
+      }
+
+      const rows = [...leaderboard].sort((a, b) => Number(b.total_score || 0) - Number(a.total_score || 0))
+      const visiblePlayers = new Set(rows.map((row) => row.player_id))
+
+      for (const [playerId, row] of rowNodes) {
+        if (!visiblePlayers.has(playerId)) {
+          row.remove()
+          rowNodes.delete(playerId)
+        }
+      }
+
+      for (const [index, row] of rows.entries()) {
+        const tr = getOrCreateRow(row.player_id)
+        tr.querySelector('.rank').textContent = String(index + 1)
+        tr.querySelector('[data-col="player"]').textContent = row.player_id
+        tr.querySelector('[data-col="score"]').textContent = String(Number(row.total_score || 0))
+        tr.querySelector('[data-col="games"]').textContent = String(Number(row.games_played || 0))
+
+        if (flashPlayers.has(row.player_id)) {
+          tr.classList.remove('flash')
+          void tr.offsetWidth
+          tr.classList.add('flash')
+        } else {
+          tr.classList.remove('flash')
+        }
+
+        tbody.appendChild(tr)
+      }
+    }
+
+    function upsertRows(rows) {
+      for (const row of rows) {
+        const index = leaderboard.findIndex((item) => item.player_id === row.player_id)
+        if (index >= 0) {
+          leaderboard[index] = row
+        } else {
+          leaderboard.push(row)
+        }
+      }
+    }
+
+    async function loadInitialState() {
+      try {
+        leaderboard = await leaderboardView.get()
+        render()
+        log('Fetched initial leaderboard', `${leaderboard.length} row(s)`)
+      } catch (error) {
+        log('Initial fetch failed', error.message)
+      }
+    }
+
+    leaderboardView.subscribe({
+      onOpen() {
+        setStatus(true, 'Live')
+        log('WebSocket connected')
+      },
+      onData(diff) {
+        if (diff.deleted.length > 0) {
+          const deletedPlayers = new Set(diff.deleted.map((row) => row.player_id))
+          leaderboard = leaderboard.filter((row) => !deletedPlayers.has(row.player_id))
+        }
+
+        upsertRows(diff.inserted)
+        upsertRows(diff.updated)
+
+        const flashPlayers = new Set([
+          ...diff.inserted.map((row) => row.player_id),
+          ...diff.updated.map((row) => row.player_id),
+        ])
+
+        render(flashPlayers)
+        log('Received diff', `+${diff.inserted.length} ~${diff.updated.length} -${diff.deleted.length}`)
+      },
+      onError(error) {
+        setStatus(false, 'Subscription Error')
+        log('Subscription error', error.message)
+      },
+      onReconnect() {
+        setStatus(false, 'Reconnecting')
+        log('Subscription reconnecting')
+      },
+    })
+
+    async function emitRandomScore() {
+      const player = players[Math.floor(Math.random() * players.length)]
+      const score = Math.floor(Math.random() * 100) + 1
+
+      await gameEvents.emit({
+        player_id: player,
+        score,
+        event_type: 'game',
+      })
+
+      log('Emitted score', `${player} +${score}`)
+    }
+
+    async function emitBatchScores() {
+      const events = Array.from({ length: 10 }, () => ({
+        player_id: players[Math.floor(Math.random() * players.length)],
+        score: Math.floor(Math.random() * 100) + 1,
+        event_type: 'game',
+      }))
+
+      await gameEvents.emitBatch(events)
+      log('Emitted batch', `${events.length} event(s)`)
+    }
+
+    document.getElementById('single-score').addEventListener('click', () => {
+      emitRandomScore().catch((error) => log('Emit failed', error.message))
+    })
+
+    document.getElementById('batch-scores').addEventListener('click', () => {
+      emitBatchScores().catch((error) => log('Batch emit failed', error.message))
+    })
+
+    setStatus(false, 'Connecting')
+    loadInitialState()
+  </script>
+</body>
+</html>
