@@ -1,9 +1,10 @@
 # Wavelet
 
-[![Slack](https://badgen.net/badge/Slack/Join%20RisingWave/0abd59?icon=slack)](https://go.risingwave.com/slack)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![CI](https://github.com/risingwavelabs/wavelet/actions/workflows/ci.yml/badge.svg)](https://github.com/risingwavelabs/wavelet/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@risingwave/wavelet)](https://www.npmjs.com/package/@risingwave/wavelet)
-[![SKILL.md](https://img.shields.io/badge/SKILL.md-agent%20onboarding-black)](.claude/skills/wavelet/SKILL.md)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![Slack](https://badgen.net/badge/Slack/Join%20RisingWave/0abd59?icon=slack)](https://go.risingwave.com/slack)
+[![SKILL.md](https://img.shields.io/badge/SKILL.md-agent%20onboarding-black)](.agents/skills/wavelet/SKILL.md)
 
 **The reactive backend for agents and apps.**
 
@@ -11,18 +12,39 @@ Write a SQL query. Subscribe to its result from your app or AI agent. When the u
 
 Built on [RisingWave](https://github.com/risingwavelabs/risingwave). By the RisingWave team.
 
+## What Wavelet Does
+
+Most real-time tools push **row changes** -- "a row was inserted into the orders table." Wavelet pushes **computed results** -- "revenue for tenant A is now $12,450."
+
+You define the computation as a SQL materialized view. RisingWave maintains it incrementally. Wavelet fans out diffs to connected clients over WebSocket, filtered per tenant via JWT claims.
+
+```
+Events in -> RisingWave (incremental SQL) -> Wavelet (fan-out + JWT filter) -> Your app / AI agent
+```
+
 ## Use Cases
 
-### Live Dashboards
+### Real-time SaaS Dashboards
 
-Embed real-time, pre-computed KPIs directly into your app. Define aggregations, joins, and window functions in SQL. Wavelet pushes the computed result to every connected client, filtered per tenant via JWT.
+Your customers log in and see their own metrics updating live. Revenue, active users, API usage -- computed server-side, pushed per-tenant, no polling.
 
 ```typescript
+streams: {
+  orders: {
+    columns: {
+      tenant_id: 'string', amount: 'float',
+      product_id: 'string', ts: 'timestamp',
+    }
+  }
+},
+
 views: {
-  revenue_by_tenant: {
+  tenant_revenue: {
     query: sql`
-      SELECT tenant_id, SUM(revenue) AS total_revenue,
-             COUNT(*) AS order_count
+      SELECT tenant_id,
+             SUM(amount) AS total_revenue,
+             COUNT(*) AS order_count,
+             SUM(amount) FILTER (WHERE ts > NOW() - INTERVAL '24 hours') AS revenue_24h
       FROM orders GROUP BY tenant_id
     `,
     filterBy: 'tenant_id',
@@ -30,29 +52,11 @@ views: {
 }
 ```
 
-```typescript
-const { data } = useWavelet('revenue_by_tenant')  // live, per-tenant, pre-computed
-```
+A client with `{ tenant_id: "acme" }` in their JWT sees only Acme's numbers. One view, thousands of tenants, each isolated by JWT. The alternative is writing a polling endpoint, a caching layer, and a per-tenant authorization check -- Wavelet replaces all three.
 
-### Agent Watchdogs
+### Usage Metering and Billing
 
-AI agents subscribe to computed views via MCP and act when conditions are met. The agent gets pushed only the computed exceptions, not the firehose.
-
-```typescript
-views: {
-  sla_violations: sql`
-    SELECT order_id, customer_id, fulfillment_time_mins
-    FROM order_status
-    WHERE fulfillment_time_mins > 120
-  `
-}
-```
-
-An agent subscribes to `sla_violations` via MCP. When a new row appears, the agent triggers an escalation. No polling, no cron jobs.
-
-### Usage Metering
-
-Stream billing events, compute running totals per customer in SQL, push to both customer-facing dashboards and enforcement layers.
+Every API call, every token, every GPU second -- streamed in, aggregated per customer, pushed to dashboards and enforcement layers in real time.
 
 ```typescript
 streams: {
@@ -67,8 +71,10 @@ streams: {
 views: {
   customer_usage: {
     query: sql`
-      SELECT customer_id, SUM(tokens) AS total_tokens,
-             SUM(cost_usd) AS total_cost
+      SELECT customer_id,
+             SUM(tokens) AS total_tokens,
+             SUM(cost_usd) AS total_cost,
+             COUNT(*) AS total_requests
       FROM api_calls GROUP BY customer_id
     `,
     filterBy: 'customer_id',
@@ -76,104 +82,25 @@ views: {
 }
 ```
 
-Each customer sees only their own usage via JWT. Your billing service reads the same view via HTTP. Replaces a Kafka + Flink + Redis + custom WebSocket stack with a config file.
+Your customer-facing usage page subscribes via WebSocket. Your rate limiter reads the same view via HTTP. Same source of truth, no sync issues.
 
-### Anomaly Alerts
+### Agent Watchdogs
 
-Define thresholds in SQL. Get notified the moment a computed metric crosses them, not on the next poll cycle.
+AI agents subscribe to computed views via MCP and act when conditions are met. The agent receives only the exceptions, not the firehose.
 
 ```typescript
 views: {
-  high_frequency_users: sql`
-    SELECT user_id, COUNT(*) AS tx_count
-    FROM transactions
-    WHERE created_at > NOW() - INTERVAL '1 hour'
-    GROUP BY user_id
-    HAVING COUNT(*) > 100
+  sla_violations: sql`
+    SELECT order_id, customer_id,
+           fulfillment_time_mins,
+           fulfillment_time_mins - 120 AS overdue_by_mins
+    FROM order_status
+    WHERE fulfillment_time_mins > 120
   `
 }
 ```
 
-When a user crosses 100 transactions/hour, a row appears in the view. The subscription diff delivers it immediately. When they drop below, the row is deleted and the diff reflects that too.
-
-### Live Inventory
-
-Compute available stock from order streams, reservation holds, and warehouse updates. Push to every product page.
-
-```typescript
-views: {
-  available_stock: sql`
-    SELECT product_id,
-           warehouse_qty - pending_orders - reserved AS available
-    FROM inventory
-    JOIN (SELECT product_id, COUNT(*) AS pending_orders FROM orders WHERE status = 'pending' GROUP BY product_id) o USING (product_id)
-    JOIN (SELECT product_id, COUNT(*) AS reserved FROM reservations WHERE expires_at > NOW() GROUP BY product_id) r USING (product_id)
-  `
-}
-```
-
-### Multiplayer State
-
-Compute shared state from a stream of user actions. Clients receive the authoritative computed result, no client-side conflict resolution needed.
-
-```typescript
-views: {
-  board_summary: sql`
-    SELECT board_id, column_name, COUNT(*) AS card_count,
-           SUM(story_points) AS total_points
-    FROM cards GROUP BY board_id, column_name
-  `
-}
-```
-
-Best for computed summaries (column counts, aggregated scores, progress bars). Not suited for sub-50ms latency requirements like cursor positions.
-
-### Proactive Agents
-
-An agent watches a portfolio. When a position's moving average crosses a threshold, it places an order.
-
-```typescript
-streams: {
-  trades: {
-    columns: {
-      symbol: 'string', price: 'float',
-      volume: 'int', ts: 'timestamp',
-    }
-  },
-  orders: {
-    columns: {
-      symbol: 'string', side: 'string',
-      qty: 'int', reason: 'string',
-    }
-  },
-},
-
-views: {
-  ma_crossovers: sql`
-    SELECT symbol, price,
-           AVG(price) OVER (PARTITION BY symbol ORDER BY ts ROWS 50 PRECEDING) AS ma50,
-           AVG(price) OVER (PARTITION BY symbol ORDER BY ts ROWS 200 PRECEDING) AS ma200
-    FROM trades
-    WHERE symbol IN ('AAPL', 'NVDA', 'TSLA')
-    QUALIFY ma50 > ma200 AND
-            LAG(ma50) OVER (PARTITION BY symbol ORDER BY ts) <= LAG(ma200) OVER (PARTITION BY symbol ORDER BY ts)
-  `
-}
-```
-
-The agent subscribes to `ma_crossovers` via MCP. A golden cross appears:
-
-```
-query_view("ma_crossovers")
--> [{ symbol: "NVDA", price: 142.50, ma50: 138.2, ma200: 137.9 }]
-
-emit_event("orders", {
-  symbol: "NVDA", side: "buy", qty: 100,
-  reason: "MA50 crossed above MA200"
-})
-```
-
-The order lands in the `orders` stream. A downstream view tracks open positions. The agent's dashboard updates.
+An agent subscribes to `sla_violations` via MCP. When a new row appears, the agent escalates. When the issue is resolved, the row disappears from the view and the agent sees the delete diff. No polling, no cron, no stale alerts.
 
 ## Quick Start
 
@@ -223,96 +150,43 @@ export default defineConfig({
 npx wavelet dev
 ```
 
-**3. Start the React example app**
+**3. Try the example app**
 
 ```bash
 npm run build
-npm exec vite -- --open /examples/react-leaderboard/
+npx vite --open /examples/sdk-leaderboard/
 ```
 
-Then open `http://localhost:5173/examples/react-leaderboard/`.
+See [`examples/sdk-leaderboard`](./examples/sdk-leaderboard/) for a working browser demo, or [`examples/react-leaderboard`](./examples/react-leaderboard/) for a React version.
 
-The example lives in [`examples/react-leaderboard`](./examples/react-leaderboard/) and uses:
-- `React` + `ReactDOM` in the browser
-- `WaveletClient` from the local browser SDK build
-- keyed row reconciliation by `player_id`
-
-**4. Subscribe from your app**
+**4. Subscribe from your own app**
 
 ```bash
 npx wavelet generate   # generates .wavelet/client.ts with full types
 ```
 
 ```typescript
-import { useWavelet } from './.wavelet/client'
+import { TypedWaveletClient } from './.wavelet/client'
 
-function Leaderboard() {
-  const { data, isLoading } = useWavelet('leaderboard')
-  // data: { player_id: string, total_score: number, games_played: number }[]
-  // Updates automatically via WebSocket
+const wavelet = new TypedWaveletClient({ url: 'http://localhost:8080' })
 
-  if (isLoading) return <div>Loading...</div>
+// read current state
+const rows = await wavelet.views.leaderboard.get()
 
-  return (
-    <ul>
-      {data.map((row) => (
-        <li key={row.player_id}>{row.player_id}: {row.total_score}</li>
-      ))}
-    </ul>
-  )
-}
-```
+// subscribe to live updates
+wavelet.views.leaderboard.subscribe({
+  onData: (diff) => {
+    console.log(diff.inserted, diff.updated, diff.deleted)
+  }
+})
 
-**5. Write events**
-
-```typescript
+// write events
 await wavelet.streams.game_events.emit({
   player_id: 'alice',
   score: 42,
   event_type: 'win',
 })
-// Leaderboard recomputes. All clients receive the diff.
 ```
-
-## SDK Example
-
-Want a minimal browser example that uses the SDK directly instead of hand-written `fetch` and `WebSocket` calls?
-
-Use [`examples/sdk-leaderboard`](./examples/sdk-leaderboard/):
-
-```bash
-npm install
-npm run build
-node packages/cli/dist/index.js dev --config examples/sdk-leaderboard/wavelet.config.ts
-npm exec vite -- --open /examples/sdk-leaderboard/
-```
-
-Then open `http://localhost:5173/examples/sdk-leaderboard/`.
-
-The page imports the browser ESM build from `packages/sdk/browser/index.browser.js` and demonstrates:
-- `client.view('leaderboard').get()`
-- `client.view('leaderboard').subscribe(...)`
-- `client.stream('game_events').emit(...)`
-- `client.stream('game_events').emitBatch(...)`
-
-## React Example
-
-Want the same leaderboard as a React app with keyed row reconciliation?
-
-Use [`examples/react-leaderboard`](./examples/react-leaderboard/):
-
-```bash
-npm run build
-node packages/cli/dist/index.js dev --config examples/react-leaderboard/wavelet.config.ts
-npm exec vite -- --open /examples/react-leaderboard/
-```
-
-Then open `http://localhost:5173/examples/react-leaderboard/`.
-
-This example:
-- loads `React` and `ReactDOM` from `esm.sh`
-- imports `initWavelet()` and `useWavelet()` from `packages/sdk/browser/react.js`
-- uses the SDK React hooks for the initial fetch and live updates
 
 ## Agent Integration (MCP)
 
@@ -343,9 +217,9 @@ AI agents query views and write events as tool calls.
 
 ## Agent Onboarding
 
-Read [SKILL.md](.claude/skills/wavelet/SKILL.md) and follow the instructions to set up and use Wavelet.
+Read [SKILL.md](.agents/skills/wavelet/SKILL.md) and follow the instructions to set up and use Wavelet.
 
-## How It Works
+## Architecture
 
 ```
 App / Agent  <-  WebSocket  <-  Wavelet Server  <-  SQL cursor  <-  RisingWave
@@ -354,13 +228,13 @@ App / Agent  <-  WebSocket  <-  Wavelet Server  <-  SQL cursor  <-  RisingWave
                                 + fan-out                       computation
 ```
 
-1. You define **streams** (data in) and **views** (what to compute) in `wavelet.config.ts`
-2. `wavelet dev` syncs config to RisingWave -- creates tables, materialized views, and subscriptions
-3. When source data changes, RisingWave incrementally recomputes affected views
-4. Wavelet maintains one cursor per view, fans out diffs to all connected clients
-5. JWT claims filter rows per-client for multi-tenant isolation
+**Stateless server.** Wavelet holds no persistent state. Cursor positions are in memory and recover from RisingWave's subscription retention window on restart.
 
-Wavelet is stateless. All state lives in RisingWave.
+**Single cursor per view.** One subscription cursor feeds all connected clients. 1 client or 10,000 -- same RisingWave load.
+
+**Config-driven DDL.** `wavelet.config.ts` is the source of truth. `wavelet dev` and `wavelet push` diff config against RisingWave and apply minimal changes (create/drop tables, materialized views, subscriptions).
+
+**JWT-scoped delivery.** Views with `filterBy` match the column value against a JWT claim. Filtering is enforced server-side -- clients cannot override it.
 
 ## CLI
 
@@ -385,17 +259,6 @@ GET  /v1/streams                 -> list all streams
 POST /v1/streams/{name}          -> write single event
 POST /v1/streams/{name}/batch    -> write batch of events
 WS   /subscribe/{name}           -> real-time diffs
-```
-
-## Project Structure
-
-```
-packages/
-  config/    ->  @risingwave/wavelet         defineConfig, sql tag, types
-  server/    ->  @risingwave/wavelet-server  WebSocket fan-out, cursor polling, JWT, HTTP API
-  sdk/       ->  @risingwave/wavelet-sdk     TypeScript client + React hooks
-  cli/       ->  @risingwave/wavelet-cli     CLI (init, dev, push, generate)
-  mcp/       ->  @risingwave/wavelet-mcp     MCP server for AI agents
 ```
 
 ## License
