@@ -1,5 +1,9 @@
 # Wavelet
 
+[![Slack](https://badgen.net/badge/Slack/Join%20RisingWave/0abd59?icon=slack)](https://go.risingwave.com/slack)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![npm](https://img.shields.io/npm/v/@risingwave/wavelet)](https://www.npmjs.com/package/@risingwave/wavelet)
+
 **The reactive backend for agents and apps.**
 
 Write a SQL query. Subscribe to its result from a React component or an AI agent. When the underlying data changes, Wavelet pushes the recomputed result to every subscriber.
@@ -172,16 +176,14 @@ The order lands in the `orders` stream. A downstream view tracks open positions.
 
 ## Quick Start
 
-Wavelet requires [RisingWave](https://github.com/risingwavelabs/risingwave) as its backend. `wavelet dev` will auto-start it if you have the binary or Docker installed:
+Install [RisingWave](https://docs.risingwave.com/docs/current/get-started/) and Wavelet:
 
 ```bash
-# Install RisingWave (pick one)
-brew tap risingwavelabs/risingwave && brew install risingwave
-# or: docker pull risingwavelabs/risingwave:latest
-
-# Install Wavelet
-npm install @risingwave/wavelet
+curl -L https://risingwave.com/sh | sh   # install RisingWave
+npm install @risingwave/wavelet           # install Wavelet
 ```
+
+`wavelet dev` auto-starts RisingWave if the binary or Docker is available.
 
 **1. Define your config**
 
@@ -324,12 +326,6 @@ GET  /v1/streams                 -> list all streams
 POST /v1/streams/{name}          -> write single event
 POST /v1/streams/{name}/batch    -> write batch of events
 WS   /subscribe/{name}           -> real-time diffs
-```
-
-## Run Locally
-
-```bash
-docker compose up     # Starts RisingWave + Wavelet
 ```
 
 ## Project Structure
