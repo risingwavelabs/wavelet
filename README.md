@@ -281,6 +281,25 @@ The page imports the browser ESM build from `packages/sdk/browser/index.browser.
 - `client.stream('game_events').emit(...)`
 - `client.stream('game_events').emitBatch(...)`
 
+## React Example
+
+Want the same leaderboard as a React app with keyed row reconciliation?
+
+Use [`examples/react-leaderboard`](./examples/react-leaderboard/):
+
+```bash
+npm run build
+node packages/cli/dist/index.js dev --config examples/react-leaderboard/wavelet.config.ts
+python3 -m http.server 4173
+```
+
+Then open `http://localhost:4173/examples/react-leaderboard/`.
+
+This example:
+- loads `React` and `ReactDOM` from `esm.sh`
+- imports the local browser SDK build from `packages/sdk/browser/index.browser.js`
+- uses React state updates to render leaderboard diffs without manual DOM patching
+
 ## Agent Integration (MCP)
 
 AI agents query views and write events as tool calls.
