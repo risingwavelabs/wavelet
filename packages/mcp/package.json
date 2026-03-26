@@ -1,6 +1,6 @@
 {
   "name": "@risingwave/wavelet-mcp",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Wavelet MCP server - expose views and streams as AI agent tools",
   "homepage": "https://github.com/risingwavelabs/wavelet",
   "repository": {
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "@risingwave/wavelet": "0.1.4",
+    "@risingwave/wavelet": "0.2.0",
     "pg": "^8.13.0"
   },
   "devDependencies": {
