@@ -26,9 +26,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Debug workspace resolution
+        run: |
+          ls -la node_modules/@risingwave/
+          node -e "console.log(require.resolve('@risingwave/wavelet/package.json'))"
+          cat node_modules/@risingwave/wavelet/dist/types.d.ts 2>/dev/null | head -10 || echo "dist/types.d.ts not found"
+
       - name: Build packages (in dependency order)
         run: |
           cd packages/config && npx tsc && cd ../..
+          cat node_modules/@risingwave/wavelet/dist/types.d.ts | head -10
           cd packages/server && npx tsc && cd ../..
           cd packages/sdk && npm run build && cd ../..
           cd packages/cli && npx tsc && cd ../..
