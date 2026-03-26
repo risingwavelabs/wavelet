@@ -1,6 +1,6 @@
 {
   "name": "@risingwave/wavelet",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Subscribe to computed results, not raw rows",
   "homepage": "https://github.com/risingwavelabs/wavelet",
   "repository": {
