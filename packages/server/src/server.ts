@@ -14,9 +14,11 @@ export class WaveletServer {
 
   constructor(private config: WaveletConfig) {
     this.jwt = new JwtVerifier(config.jwt)
-    this.cursorManager = new CursorManager(config.database, config.views ?? {})
-    this.fanout = new WebSocketFanout(this.cursorManager, this.jwt, config.views ?? {})
-    this.httpApi = new HttpApi(config.database, config.streams ?? {}, config.views ?? {}, this.jwt)
+    const queries = config.queries ?? config.views ?? {}
+    const events = config.events ?? config.streams ?? {}
+    this.cursorManager = new CursorManager(config.database, queries)
+    this.fanout = new WebSocketFanout(this.cursorManager, this.jwt, queries)
+    this.httpApi = new HttpApi(config.database, events, queries, this.jwt)
   }
 
   async start(): Promise<void> {
@@ -27,14 +29,14 @@ export class WaveletServer {
     this.fanout.attach(this.httpServer)
 
     await this.cursorManager.initialize()
-    this.cursorManager.startPolling((viewName, diffs) => {
-      this.fanout.broadcast(viewName, diffs)
+    this.cursorManager.startPolling((queryName, diffs) => {
+      this.fanout.broadcast(queryName, diffs)
     })
 
     await new Promise<void>((resolve) => {
       this.httpServer!.listen(port, host, () => {
         console.log(`Wavelet server listening on ${host}:${port}`)
-        console.log(`WebSocket: ws://${host}:${port}/subscribe/{view}`)
+        console.log(`WebSocket: ws://${host}:${port}/subscribe/{query}`)
         console.log(`HTTP API:  http://${host}:${port}/v1/`)
         resolve()
       })
@@ -53,8 +55,8 @@ export class WaveletServer {
     this.fanout.attach(server, prefix)
 
     await this.cursorManager.initialize()
-    this.cursorManager.startPolling((viewName, diffs) => {
-      this.fanout.broadcast(viewName, diffs)
+    this.cursorManager.startPolling((queryName, diffs) => {
+      this.fanout.broadcast(queryName, diffs)
     })
 
     const handleHttp = (req: IncomingMessage, res: ServerResponse) => {

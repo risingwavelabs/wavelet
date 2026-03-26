@@ -29,8 +29,8 @@ class WaveletServer {
 ```typescript
 interface WaveletConfig {
   database: string
-  streams?: Record<string, { columns: Record<string, ColumnType> }>
-  views?: Record<string, ViewDef | SqlFragment>
+  events?: Record<string, { columns: Record<string, ColumnType> }>
+  queries?: Record<string, QueryDef | SqlFragment>
   jwt?: { secret?: string; jwksUrl?: string; issuer?: string; audience?: string }
   server?: { port?: number; host?: string }
 }
@@ -39,28 +39,28 @@ interface WaveletConfig {
 ## HTTP API routes
 
 ```
-GET  /v1/health                  -> { status: "ok" }
-GET  /v1/views                   -> { views: string[] }
-GET  /v1/views/{name}            -> { view: string, rows: object[] }
-GET  /v1/streams                 -> { streams: string[] }
-POST /v1/streams/{name}          -> { ok: true }
-POST /v1/streams/{name}/batch    -> { ok: true, count: number }
+GET  /v1/health                    -> { status: "ok" }
+GET  /v1/queries                   -> { queries: string[] }
+GET  /v1/queries/{name}            -> { query: string, rows: object[] }
+GET  /v1/events                    -> { events: string[] }
+POST /v1/events/{name}             -> { ok: true }
+POST /v1/events/{name}/batch       -> { ok: true, count: number }
 ```
 
-Error responses: `{ error: string, available_views?: string[], available_streams?: string[], routes?: string[] }`
+Error responses: `{ error: string, available_queries?: string[], available_events?: string[], routes?: string[] }`
 
 ## WebSocket protocol
 
-Connect: `ws://host/subscribe/{viewName}?token={jwt}&cursor={cursor}`
+Connect: `ws://host/subscribe/{queryName}?token={jwt}&cursor={cursor}`
 
 Messages (server to client):
 ```json
-{ "type": "connected", "view": "viewName" }
-{ "type": "diff", "view": "viewName", "cursor": "123", "inserted": [...], "updated": [...], "deleted": [...] }
+{ "type": "connected", "query": "queryName" }
+{ "type": "diff", "query": "queryName", "cursor": "123", "inserted": [...], "updated": [...], "deleted": [...] }
 ```
 
 Close codes:
-- 4000: server rejected (auth error, view not found). Reason in close message.
+- 4000: server rejected (auth error, query not found). Reason in close message.
 - 1001: server shutting down
 
 ## DdlManager API (used by wavelet-cloud provisioner)
@@ -75,7 +75,7 @@ class DdlManager {
 
 interface DdlAction {
   type: 'create' | 'update' | 'delete' | 'unchanged'
-  resource: 'stream' | 'view' | 'subscription'
+  resource: 'event' | 'query' | 'subscription'
   name: string
   detail?: string
 }

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "wavelet": {
+      "source": "risingwavelabs/skills",
+      "sourceType": "github",
+      "computedHash": "bbc7afe349a97065aa26b15cc3d14f18060aef7d5b93e393e4593cc08da35f38"
+    }
+  }
+}

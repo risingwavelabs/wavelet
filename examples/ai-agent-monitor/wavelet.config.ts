@@ -3,7 +3,7 @@ import { defineConfig, sql } from '@risingwave/wavelet'
 export default defineConfig({
   database: process.env.WAVELET_DATABASE_URL ?? 'postgres://root@localhost:4566/dev',
 
-  streams: {
+  events: {
     llm_events: {
       columns: {
         tenant_id: 'string',
@@ -16,7 +16,7 @@ export default defineConfig({
     }
   },
 
-  views: {
+  queries: {
     // Per-tenant usage: tokens, cost, request count
     tenant_usage: {
       query: sql`

@@ -571,7 +571,7 @@
 
     // Fetch initial KPI data
     function fetchKpis() {
-      fetch(`${API}/v1/views/tenant_usage`)
+      fetch(`${API}/v1/queries/tenant_usage`)
         .then(r => r.json())
         .then(d => {
           if (d.rows && d.rows.length > 0) {
@@ -589,7 +589,7 @@
     }
 
     function fetchModels() {
-      fetch(`${API}/v1/views/model_stats`)
+      fetch(`${API}/v1/queries/model_stats`)
         .then(r => r.json())
         .then(d => {
           if (d.rows) {
@@ -655,7 +655,7 @@
 
       const event = { tenant_id, model, tokens_in, tokens_out, cost_usd: Math.round(cost_usd * 10000) / 10000, latency_ms }
 
-      const res = await fetch(`${API}/v1/streams/llm_events`, {
+      const res = await fetch(`${API}/v1/events/llm_events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(event),

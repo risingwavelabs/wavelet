@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Revenue — Wavelet</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg: #f4f2ee;
+      --surface: #ffffff;
+      --border: #e3e0db;
+      --border-light: #eceae5;
+      --text: #1c1b19;
+      --text-2: #5c5a56;
+      --text-3: #9b9892;
+      --ink: #2c2b28;
+      --accent: #1a56db;
+      --positive: #1a7a42;
+      --negative: #c93b3b;
+      --shadow-sm: 0 1px 2px rgba(28,27,25,0.04);
+      --shadow-md:
+        0 1px 3px rgba(28,27,25,0.04),
+        0 4px 12px rgba(28,27,25,0.03);
+      --sans: "Instrument Sans", -apple-system, sans-serif;
+      --mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ---- Nav ---- */
+    nav {
+      height: 52px;
+      padding: 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.01em;
+    }
+
+    .nav-title span {
+      color: var(--text-3);
+      font-weight: 400;
+      margin: 0 6px;
+    }
+
+    .nav-page { font-weight: 500; color: var(--text-2); }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-3);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 9px;
+      background: var(--bg);
+    }
+
+    .pill-dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--text-3);
+      transition: background 0.4s;
+    }
+
+    .pill.on .pill-dot {
+      background: var(--positive);
+    }
+
+    .pill.on { color: var(--text-2); }
+
+    /* ---- Layout ---- */
+    .page {
+      max-width: 1020px;
+      margin: 0 auto;
+      padding: 24px 28px 60px;
+      display: grid;
+      gap: 14px;
+    }
+
+    /* ---- Metric strip ---- */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0;
+      background: var(--surface);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .metric {
+      padding: 20px 22px;
+      border-right: 1px solid var(--border-light);
+    }
+
+    .metric:last-child { border-right: none; }
+
+    .metric-label {
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--text-3);
+      margin-bottom: 6px;
+    }
+
+    .metric-num {
+      font-family: var(--mono);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      transition: color 0.5s ease;
+    }
+
+    .metric-num.flash { color: var(--positive); }
+
+    /* ---- Cards ---- */
+    .row {
+      display: grid;
+      grid-template-columns: 1.4fr 0.6fr;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .card-head {
+      padding: 13px 20px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-2);
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .card-body { padding: 18px 20px; }
+
+    .chart-box { position: relative; height: 180px; }
+
+    /* ---- Table ---- */
+    table { width: 100%; border-collapse: collapse; }
+
+    th {
+      text-align: left;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 9px 20px;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    td {
+      padding: 10px 20px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(0,0,0,0.03);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .new-row { animation: highlight 0.7s ease-out; }
+    @keyframes highlight {
+      from { background: rgba(26,122,66,0.05); }
+      to { background: transparent; }
+    }
+
+    .tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+      background: rgba(26,86,219,0.06);
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+
+    .money {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--positive);
+    }
+
+    .secondary { color: var(--text-2); }
+
+    .timestamp {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    .foot {
+      text-align: center;
+      padding: 16px 0;
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    .foot a {
+      color: var(--text-2);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .foot a:hover { color: var(--ink); }
+
+    /* ---- Entrance ---- */
+    .metric, .card {
+      animation: enter 0.45s ease-out both;
+    }
+
+    .metrics .metric:nth-child(1) { animation-delay: 0s; }
+    .metrics .metric:nth-child(2) { animation-delay: 0.03s; }
+    .metrics .metric:nth-child(3) { animation-delay: 0.06s; }
+    .metrics .metric:nth-child(4) { animation-delay: 0.09s; }
+    .row .card:nth-child(1) { animation-delay: 0.12s; }
+    .row .card:nth-child(2) { animation-delay: 0.15s; }
+
+    @keyframes enter {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 768px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .metric:nth-child(2) { border-right: none; }
+      .metric:nth-child(3), .metric:nth-child(4) { border-top: 1px solid var(--border-light); }
+      .row { grid-template-columns: 1fr; }
+      .page { padding: 16px 12px 40px; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="nav-title">Wavelet<span>/</span><span class="nav-page">Revenue</span></div>
+    <div class="pill" id="pill">
+      <span class="pill-dot"></span>
+      <span id="statusText">connecting</span>
+    </div>
+  </nav>
+
+  <div class="page">
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Revenue</div>
+        <div class="metric-num" id="totalRevenue">$0</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Orders</div>
+        <div class="metric-num" id="totalOrders">0</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg Order</div>
+        <div class="metric-num" id="avgOrder">$0</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Tenants</div>
+        <div class="metric-num" id="activeTenants">0</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <div class="card-head">Revenue by Product</div>
+        <div class="card-body"><div class="chart-box"><canvas id="productChart"></canvas></div></div>
+      </div>
+      <div class="card">
+        <div class="card-head">Revenue by Region</div>
+        <div class="card-body"><div class="chart-box"><canvas id="regionChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="card" style="animation-delay:0.18s">
+      <div class="card-head">Recent Orders</div>
+      <div>
+        <table>
+          <thead><tr>
+            <th>Tenant</th><th>Product</th><th>Region</th><th>Amount</th><th>Time</th>
+          </tr></thead>
+          <tbody id="ordersBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <a href="https://github.com/risingwavelabs/wavelet">Wavelet</a> + <a href="https://github.com/risingwavelabs/risingwave">RisingWave</a>
+  </div>
+
+  <script>
+    const BASE = window.location.hostname === 'localhost'
+      ? 'http://localhost:8080'
+      : `http://${window.location.hostname}:8080`
+    const WS = BASE.replace('http', 'ws')
+
+    // ---- Animated numbers ----
+    const st = {}
+    function tick(el, target) {
+      const id = el.id
+      if (!st[id]) st[id] = { v: 0, raf: null }
+      const s = st[id]; s.target = target
+      if (s.raf) return
+      const from = s.v, t0 = performance.now()
+      ;(function run(now) {
+        const p = Math.min((now - t0) / 400, 1)
+        s.v = from + (s.target - from) * (1 - Math.pow(1 - p, 3))
+        el.textContent = (id === 'totalOrders' || id === 'activeTenants')
+          ? Math.round(s.v).toLocaleString()
+          : '$' + Math.round(s.v).toLocaleString()
+        if (p < 1) s.raf = requestAnimationFrame(run)
+        else { s.raf = null; s.v = s.target }
+      })(t0)
+      el.classList.add('flash')
+      setTimeout(() => el.classList.remove('flash'), 600)
+    }
+
+    // ---- Charts ----
+    Chart.defaults.color = '#9b9892'
+    Chart.defaults.borderColor = 'rgba(0,0,0,0.04)'
+    Chart.defaults.font.family = '"Instrument Sans", sans-serif'
+    Chart.defaults.font.size = 11
+
+    const pal = ['#1a56db','#2d7a4f','#b45d1e','#8b3db6','#c93b3b']
+
+    const productChart = new Chart(document.getElementById('productChart'), {
+      type: 'bar',
+      data: { labels: [], datasets: [{ data: [], backgroundColor: pal, borderRadius: 3, borderSkipped: false, maxBarThickness: 34 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10.5 } } },
+          y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k', font: { family: '"IBM Plex Mono"', size: 10 } } },
+        },
+        animation: { duration: 350, easing: 'easeOutCubic' },
+      },
+    })
+
+    const regionChart = new Chart(document.getElementById('regionChart'), {
+      type: 'doughnut',
+      data: { labels: [], datasets: [{ data: [], backgroundColor: pal, borderWidth: 0, spacing: 2 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '66%',
+        plugins: { legend: { position: 'right', labels: { color: '#5c5a56', font: { size: 10.5 }, padding: 8, usePointStyle: true, pointStyleWidth: 6 } } },
+        animation: { duration: 350, easing: 'easeOutCubic' },
+      },
+    })
+
+    // ---- Subscribe ----
+    function sub(view, fn) {
+      const poll = () => fetch(`${BASE}/v1/queries/${view}`).then(r => r.json()).then(d => fn(d.rows)).catch(() => {})
+      poll(); setInterval(poll, 1000)
+      ;(function ws() {
+        const c = new WebSocket(`${WS}/subscribe/${view}`)
+        c.onopen = () => {
+          document.getElementById('pill').classList.add('on')
+          document.getElementById('statusText').textContent = 'live'
+        }
+        c.onmessage = e => { if (JSON.parse(e.data).type === 'diff') poll() }
+        c.onclose = () => setTimeout(ws, 2000)
+        c.onerror = () => c.close()
+      })()
+    }
+
+    sub('revenue_by_product', rows => {
+      productChart.data.labels = rows.map(r => r.product)
+      productChart.data.datasets[0].data = rows.map(r => Number(r.revenue))
+      productChart.update()
+      const rev = rows.reduce((s,r) => s + Number(r.revenue), 0)
+      const ord = rows.reduce((s,r) => s + Number(r.orders), 0)
+      tick(document.getElementById('totalRevenue'), rev)
+      tick(document.getElementById('totalOrders'), ord)
+      if (ord) tick(document.getElementById('avgOrder'), Math.round(rev/ord))
+    })
+
+    sub('revenue_by_region', rows => {
+      regionChart.data.labels = rows.map(r => r.region)
+      regionChart.data.datasets[0].data = rows.map(r => Number(r.revenue))
+      regionChart.update()
+    })
+
+    sub('tenant_revenue', rows => {
+      tick(document.getElementById('activeTenants'), rows.length)
+    })
+
+    sub('recent_orders', rows => {
+      document.getElementById('ordersBody').innerHTML = rows.slice(0, 10).map((r, i) => `
+        <tr class="${i < 2 ? 'new-row' : ''}">
+          <td><span class="tag">${r.tenant_id}</span></td>
+          <td class="secondary">${r.product}</td>
+          <td class="secondary">${r.region}</td>
+          <td class="money">$${Number(r.amount).toFixed(2)}</td>
+          <td class="timestamp">${new Date(r.ts).toLocaleTimeString()}</td>
+        </tr>
+      `).join('')
+    })
+  </script>
+</body>
+</html>

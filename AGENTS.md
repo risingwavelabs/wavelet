@@ -12,7 +12,7 @@ Monorepo using npm workspaces (`packages/*`, `examples/*`). Node >= 20.
 | `packages/server` | `@risingwave/wavelet-server` | WebSocket fanout, subscription cursor polling, JWT auth, HTTP API |
 | `packages/sdk` | `@risingwave/wavelet-sdk` | TypeScript client + React hooks (`@wavelet/sdk/react`) |
 | `packages/cli` | `@risingwave/wavelet-cli` | CLI binary (`wavelet push`, `wavelet dev`, codegen) |
-| `packages/mcp` | `@risingwave/wavelet-mcp` | MCP server - exposes views and streams as AI agent tools |
+| `packages/mcp` | `@risingwave/wavelet-mcp` | MCP server - exposes queries and events as AI agent tools |
 
 Dependency graph: `config` is the leaf. `server` and `sdk` depend on `config`. `cli` depends on `server` and `config`. `mcp` depends on `config` and `pg`.
 
@@ -39,15 +39,15 @@ Build order matters: **config -> server/sdk -> cli** (cli depends on server and 
 
 - Wavelet server wraps RisingWave's native Subscription cursor mechanism.
 - One cursor per materialized view; server fans out diffs to WebSocket clients.
-- JWT claims are matched against view `filterBy` columns for per-client row filtering.
-- HTTP API: POST for event writes, GET for view reads.
+- JWT claims are matched against query `filterBy` columns for per-client row filtering.
+- HTTP API: POST for event writes, GET for query reads.
 - All persistent state lives in RisingWave. Wavelet server is stateless -- cursor positions are in memory and recover from RisingWave's subscription retention window on restart.
 
 ## Key Design Decisions
 
-- **Single-tenant process**: One Wavelet server = one RisingWave connection = one user's views. Multi-tenancy is handled externally (by Wavelet Cloud), not inside this codebase.
+- **Single-tenant process**: One Wavelet server = one RisingWave connection = one user's queries. Multi-tenancy is handled externally (by Wavelet Cloud), not inside this codebase.
 - **Config-driven DDL**: `wavelet.config.ts` is the source of truth. `DdlManager.sync()` diffs config against RisingWave state and applies minimal changes (create/update/delete tables, MVs, subscriptions). `wavelet push` and `wavelet dev` both use this.
-- **Agent-native DX**: Types over docs. Codegen output (`.wavelet/client.ts`) is the primary interface for app developers and AI agents. All view/stream names are literal types, not strings.
+- **Agent-native DX**: Types over docs. Codegen output (`.wavelet/client.ts`) is the primary interface for app developers and AI agents. All query/event names are literal types, not strings.
 - **Idempotent operations**: All CLI commands and DDL operations are safe to run multiple times.
 - **Stateless server**: No local SQLite, no state files.
 

@@ -5,12 +5,12 @@ describe('defineConfig', () => {
   it('returns the config object unchanged', () => {
     const config = {
       database: 'postgres://root@localhost:4566/dev',
-      streams: {
-        events: {
+      events: {
+        game_events: {
           columns: { user_id: 'string' as const, score: 'int' as const },
         },
       },
-      views: {},
+      queries: {},
     }
     expect(defineConfig(config)).toBe(config)
   })

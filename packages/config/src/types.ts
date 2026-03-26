@@ -1,8 +1,11 @@
 export type ColumnType = 'string' | 'int' | 'float' | 'boolean' | 'timestamp' | 'json'
 
-export interface StreamDef {
+export interface EventDef {
   columns: Record<string, ColumnType>
 }
+
+/** @deprecated Use EventDef instead */
+export type StreamDef = EventDef
 
 export interface PostgresCdcSource {
   type: 'postgres'
@@ -14,11 +17,14 @@ export interface PostgresCdcSource {
 
 export type SourceDef = PostgresCdcSource
 
-export interface ViewDef {
+export interface QueryDef {
   query: SqlFragment
   filterBy?: string
   columns?: Record<string, ColumnType>
 }
+
+/** @deprecated Use QueryDef instead */
+export type ViewDef = QueryDef
 
 export interface SqlFragment {
   readonly _tag: 'sql'
@@ -27,9 +33,13 @@ export interface SqlFragment {
 
 export interface WaveletConfig {
   database: string
-  streams?: Record<string, StreamDef>
+  events?: Record<string, EventDef>
   sources?: Record<string, SourceDef>
-  views?: Record<string, ViewDef | SqlFragment>
+  queries?: Record<string, QueryDef | SqlFragment>
+  /** @deprecated Use events instead */
+  streams?: Record<string, EventDef>
+  /** @deprecated Use queries instead */
+  views?: Record<string, QueryDef | SqlFragment>
   jwt?: {
     secret?: string
     jwksUrl?: string

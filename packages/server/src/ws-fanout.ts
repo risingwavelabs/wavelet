@@ -1,23 +1,23 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import type { IncomingMessage, Server } from 'node:http'
-import type { ViewDef, SqlFragment } from '@risingwave/wavelet'
+import type { QueryDef, SqlFragment } from '@risingwave/wavelet'
 import type { CursorManager, ViewDiff } from './cursor-manager.js'
 import type { JwtVerifier, JwtClaims } from './jwt.js'
 
 interface Subscriber {
   ws: WebSocket
-  viewName: string
+  queryName: string
   claims: JwtClaims | null
 }
 
 export class WebSocketFanout {
   private wss: WebSocketServer | null = null
-  private subscribers: Map<string, Set<Subscriber>> = new Map() // viewName -> subscribers
+  private subscribers: Map<string, Set<Subscriber>> = new Map() // queryName -> subscribers
 
   constructor(
     private cursorManager: CursorManager,
     private jwt: JwtVerifier,
-    private views: Record<string, ViewDef | SqlFragment>
+    private queries: Record<string, QueryDef | SqlFragment>
   ) {}
 
   attach(server: Server, pathPrefix?: string): void {
@@ -54,17 +54,17 @@ export class WebSocketFanout {
 
     if (!match) {
       throw new Error(
-        `Invalid path: ${url.pathname}. Use /subscribe/{viewName}. ` +
-        `Available views: ${Object.keys(this.views).join(', ')}`
+        `Invalid path: ${url.pathname}. Use /subscribe/{queryName}. ` +
+        `Available queries: ${Object.keys(this.queries).join(', ')}`
       )
     }
 
-    const viewName = match[1]
+    const queryName = match[1]
 
-    if (!this.views[viewName]) {
-      const available = Object.keys(this.views)
+    if (!this.queries[queryName]) {
+      const available = Object.keys(this.queries)
       throw new Error(
-        `View '${viewName}' not found. Available views: ${available.join(', ')}`
+        `Query '${queryName}' not found. Available queries: ${available.join(', ')}`
       )
     }
 
@@ -80,15 +80,15 @@ export class WebSocketFanout {
       claims = await this.jwt.verify(token)
     }
 
-    const subscriber: Subscriber = { ws, viewName, claims }
+    const subscriber: Subscriber = { ws, queryName, claims }
 
-    if (!this.subscribers.has(viewName)) {
-      this.subscribers.set(viewName, new Set())
+    if (!this.subscribers.has(queryName)) {
+      this.subscribers.set(queryName, new Set())
     }
-    this.subscribers.get(viewName)!.add(subscriber)
+    this.subscribers.get(queryName)!.add(subscriber)
 
     ws.on('close', () => {
-      this.subscribers.get(viewName)?.delete(subscriber)
+      this.subscribers.get(queryName)?.delete(subscriber)
     })
 
     // Heartbeat: detect dead connections behind proxies/load balancers
@@ -100,15 +100,15 @@ export class WebSocketFanout {
     ws.on('close', () => clearInterval(pingInterval))
     ws.on('pong', () => { /* connection alive */ })
 
-    ws.send(JSON.stringify({ type: 'connected', view: viewName }))
+    ws.send(JSON.stringify({ type: 'connected', query: queryName }))
   }
 
-  broadcast(viewName: string, diff: ViewDiff): void {
-    const subs = this.subscribers.get(viewName)
+  broadcast(queryName: string, diff: ViewDiff): void {
+    const subs = this.subscribers.get(queryName)
     if (!subs || subs.size === 0) return
 
-    const viewDef = this.views[viewName]
-    const filterBy = this.getFilterBy(viewDef)
+    const queryDef = this.queries[queryName]
+    const filterBy = this.getFilterBy(queryDef)
 
     for (const sub of subs) {
       if (sub.ws.readyState !== WebSocket.OPEN) continue
@@ -128,7 +128,7 @@ export class WebSocketFanout {
 
       sub.ws.send(JSON.stringify({
         type: 'diff',
-        view: viewName,
+        query: queryName,
         cursor: filteredDiff.cursor,
         inserted: filteredDiff.inserted,
         updated: filteredDiff.updated,
@@ -155,9 +155,9 @@ export class WebSocketFanout {
     }
   }
 
-  private getFilterBy(viewDef: ViewDef | SqlFragment): string | undefined {
-    if ('_tag' in viewDef && viewDef._tag === 'sql') return undefined
-    return (viewDef as ViewDef).filterBy
+  private getFilterBy(queryDef: QueryDef | SqlFragment): string | undefined {
+    if ('_tag' in queryDef && queryDef._tag === 'sql') return undefined
+    return (queryDef as QueryDef).filterBy
   }
 
   closeAll(): void {

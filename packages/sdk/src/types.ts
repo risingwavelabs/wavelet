@@ -10,15 +10,21 @@ export interface Diff<T = Record<string, unknown>> {
   deleted: T[]
 }
 
-export interface ViewHandle<T = Record<string, unknown>> {
+export interface QueryHandle<T = Record<string, unknown>> {
   get(params?: Record<string, string>): Promise<T[]>
   subscribe(handlers: SubscribeHandlers<T>): Unsubscribe
 }
 
-export interface StreamHandle<T = Record<string, unknown>> {
+/** @deprecated Use QueryHandle instead */
+export type ViewHandle<T = Record<string, unknown>> = QueryHandle<T>
+
+export interface EventHandle<T = Record<string, unknown>> {
   emit(data: T): Promise<void>
   emitBatch(data: T[]): Promise<void>
 }
+
+/** @deprecated Use EventHandle instead */
+export type StreamHandle<T = Record<string, unknown>> = EventHandle<T>
 
 export interface SubscribeHandlers<T> {
   onOpen?: () => void
@@ -29,7 +35,7 @@ export interface SubscribeHandlers<T> {
 
 export type Unsubscribe = () => void
 
-export type WaveletErrorCode = 'AUTH_ERROR' | 'VIEW_NOT_FOUND' | 'CONNECTION_ERROR' | 'SERVER_ERROR'
+export type WaveletErrorCode = 'AUTH_ERROR' | 'QUERY_NOT_FOUND' | 'VIEW_NOT_FOUND' | 'CONNECTION_ERROR' | 'SERVER_ERROR'
 
 export class WaveletError extends Error {
   constructor(

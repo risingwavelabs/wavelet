@@ -1,5 +1,5 @@
 import pg from 'pg'
-import type { SqlFragment, ViewDef } from '@risingwave/wavelet'
+import type { SqlFragment, QueryDef } from '@risingwave/wavelet'
 
 const { Client } = pg
 
@@ -16,12 +16,12 @@ export interface ViewDiff {
   deleted: Record<string, unknown>[]
 }
 
-type DiffCallback = (viewName: string, diff: ViewDiff) => void
+type DiffCallback = (queryName: string, diff: ViewDiff) => void
 
 /**
  * Manages persistent subscription cursors against RisingWave.
  *
- * Each view gets its own dedicated pg connection and a persistent cursor.
+ * Each query gets its own dedicated pg connection and a persistent cursor.
  * Uses blocking FETCH (WITH timeout) so there is no polling interval -
  * diffs are dispatched as soon as RisingWave produces them.
  */
@@ -29,15 +29,15 @@ export class CursorManager {
   // Shared connection for DDL (CREATE SUBSCRIPTION) and ad-hoc queries
   private client: InstanceType<typeof Client> | null = null
 
-  // Per-view dedicated connections for blocking FETCH
-  private viewConnections: Map<string, InstanceType<typeof Client>> = new Map()
+  // Per-query dedicated connections for blocking FETCH
+  private queryConnections: Map<string, InstanceType<typeof Client>> = new Map()
   private cursorNames: Map<string, string> = new Map()
   private subscriptions: Map<string, string> = new Map()
   private running = false
 
   constructor(
     private connectionString: string,
-    private views: Record<string, ViewDef | SqlFragment>
+    private queries: Record<string, QueryDef | SqlFragment>
   ) {}
 
   async initialize(): Promise<void> {
@@ -45,13 +45,13 @@ export class CursorManager {
     await this.client.connect()
     console.log('Connected to RisingWave')
 
-    for (const [viewName] of Object.entries(this.views)) {
-      const subName = `wavelet_sub_${viewName}`
+    for (const [queryName] of Object.entries(this.queries)) {
+      const subName = `wavelet_sub_${queryName}`
 
       // Create subscription if not exists (idempotent)
       try {
         await this.client.query(
-          `CREATE SUBSCRIPTION ${subName} FROM ${viewName} WITH (retention = '24h')`
+          `CREATE SUBSCRIPTION ${subName} FROM ${queryName} WITH (retention = '24h')`
         )
         console.log(`Created subscription: ${subName}`)
       } catch (err: any) {
@@ -62,31 +62,31 @@ export class CursorManager {
         }
       }
 
-      this.subscriptions.set(viewName, subName)
+      this.subscriptions.set(queryName, subName)
 
-      // Create dedicated connection and persistent cursor for this view
+      // Create dedicated connection and persistent cursor for this query
       const conn = new Client({ connectionString: this.connectionString })
       await conn.connect()
 
-      const cursorName = `wavelet_cur_${viewName}`
+      const cursorName = `wavelet_cur_${queryName}`
       await conn.query(`DECLARE ${cursorName} SUBSCRIPTION CURSOR FOR ${subName}`)
       console.log(`Opened persistent cursor: ${cursorName}`)
 
-      this.viewConnections.set(viewName, conn)
-      this.cursorNames.set(viewName, cursorName)
+      this.queryConnections.set(queryName, conn)
+      this.cursorNames.set(queryName, cursorName)
     }
   }
 
   /**
-   * Start listening for diffs on all views.
-   * Each view runs its own async loop with blocking FETCH.
+   * Start listening for diffs on all queries.
+   * Each query runs its own async loop with blocking FETCH.
    * No polling interval - FETCH blocks until data arrives or timeout.
    */
   startPolling(callback: DiffCallback): void {
     this.running = true
 
-    for (const [viewName] of this.subscriptions.entries()) {
-      this.listenLoop(viewName, callback)
+    for (const [queryName] of this.subscriptions.entries()) {
+      this.listenLoop(queryName, callback)
     }
   }
 
@@ -94,9 +94,9 @@ export class CursorManager {
     this.running = false
   }
 
-  private async listenLoop(viewName: string, callback: DiffCallback): Promise<void> {
-    const conn = this.viewConnections.get(viewName)
-    const cursorName = this.cursorNames.get(viewName)
+  private async listenLoop(queryName: string, callback: DiffCallback): Promise<void> {
+    const conn = this.queryConnections.get(queryName)
+    const cursorName = this.cursorNames.get(queryName)
     if (!conn || !cursorName) return
 
     while (this.running) {
@@ -125,11 +125,11 @@ export class CursorManager {
         const diff = this.parseDiffs(allRows)
 
         if (diff.inserted.length > 0 || diff.updated.length > 0 || diff.deleted.length > 0) {
-          callback(viewName, diff)
+          callback(queryName, diff)
         }
       } catch (err: any) {
         if (!this.running) return
-        console.error(`[cursor-manager] Error fetching ${viewName}:`, err.message)
+        console.error(`[cursor-manager] Error fetching ${queryName}:`, err.message)
         // Back off on error, then retry
         await new Promise(r => setTimeout(r, 1000))
       }
@@ -187,9 +187,9 @@ export class CursorManager {
   async close(): Promise<void> {
     this.running = false
 
-    // Close per-view connections
-    for (const [viewName, conn] of this.viewConnections) {
-      const cursorName = this.cursorNames.get(viewName)
+    // Close per-query connections
+    for (const [queryName, conn] of this.queryConnections) {
+      const cursorName = this.cursorNames.get(queryName)
       try {
         if (cursorName) await conn.query(`CLOSE ${cursorName}`)
       } catch {}
@@ -197,7 +197,7 @@ export class CursorManager {
         await conn.end()
       } catch {}
     }
-    this.viewConnections.clear()
+    this.queryConnections.clear()
     this.cursorNames.clear()
 
     // Close shared connection

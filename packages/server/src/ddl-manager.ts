@@ -1,11 +1,11 @@
 import pg from 'pg'
-import type { WaveletConfig, StreamDef, ViewDef, SqlFragment, PostgresCdcSource } from '@risingwave/wavelet'
+import type { WaveletConfig, EventDef, QueryDef, SqlFragment, PostgresCdcSource } from '@risingwave/wavelet'
 
 const { Client } = pg
 
 export interface DdlAction {
   type: 'create' | 'update' | 'delete' | 'unchanged'
-  resource: 'stream' | 'source' | 'view' | 'subscription'
+  resource: 'event' | 'source' | 'query' | 'subscription'
   name: string
   detail?: string
 }
@@ -26,13 +26,13 @@ function normalizeSql(sql: string): string {
   return stripped.replace(/\s+/g, ' ').trim().toLowerCase()
 }
 
-function getViewQuery(viewDef: ViewDef | SqlFragment): string {
-  if ('_tag' in viewDef && viewDef._tag === 'sql') return viewDef.text
-  return (viewDef as ViewDef).query.text
+function getQuerySql(queryDef: QueryDef | SqlFragment): string {
+  if ('_tag' in queryDef && queryDef._tag === 'sql') return queryDef.text
+  return (queryDef as QueryDef).query.text
 }
 
-function buildCreateTableSql(name: string, streamDef: StreamDef): string {
-  const cols = Object.entries(streamDef.columns)
+function buildCreateTableSql(name: string, eventDef: EventDef): string {
+  const cols = Object.entries(eventDef.columns)
     .map(([colName, colType]) => {
       const sqlType = COLUMN_TYPE_MAP[colType]
       if (!sqlType) throw new Error(`Unknown column type "${colType}" for column "${colName}"`)
@@ -60,7 +60,7 @@ export class DdlManager {
   }
 
   /**
-   * Sync all streams, views, and subscriptions to match the config.
+   * Sync all events, queries, and subscriptions to match the config.
    * Returns a list of actions taken.
    * Idempotent - safe to call multiple times.
    */
@@ -71,24 +71,24 @@ export class DdlManager {
 
     // 1. Fetch existing state from RisingWave
     const existingTables = await this.getExistingTables()
-    const existingViews = await this.getExistingViews()
+    const existingMVs = await this.getExistingMaterializedViews()
     const existingSubscriptions = await this.getExistingSubscriptions()
 
-    const desiredStreams = config.streams ?? {}
+    const desiredEvents = config.events ?? config.streams ?? {}
     const desiredSources = config.sources ?? {}
-    const desiredViews = config.views ?? {}
+    const desiredQueries = config.queries ?? config.views ?? {}
 
-    // 2. Determine which streams (tables) to create or remove
-    const desiredStreamNames = new Set(Object.keys(desiredStreams))
-    const desiredViewNames = new Set(Object.keys(desiredViews))
+    // 2. Determine which events (tables) to create or remove
+    const desiredEventNames = new Set(Object.keys(desiredEvents))
+    const desiredQueryNames = new Set(Object.keys(desiredQueries))
 
-    // 3. Sync streams - create missing tables
-    for (const [streamName, streamDef] of Object.entries(desiredStreams)) {
-      if (existingTables.has(streamName)) {
-        actions.push({ type: 'unchanged', resource: 'stream', name: streamName })
+    // 3. Sync events - create missing tables
+    for (const [eventName, eventDef] of Object.entries(desiredEvents)) {
+      if (existingTables.has(eventName)) {
+        actions.push({ type: 'unchanged', resource: 'event', name: eventName })
       } else {
-        await this.createTable(streamName, streamDef)
-        actions.push({ type: 'create', resource: 'stream', name: streamName })
+        await this.createTable(eventName, eventDef)
+        actions.push({ type: 'create', resource: 'event', name: eventName })
       }
     }
 
@@ -108,41 +108,41 @@ export class DdlManager {
       }
     }
 
-    // 4. Sync views - create, update, or leave unchanged
-    for (const [viewName, viewDef] of Object.entries(desiredViews)) {
-      const subName = `wavelet_sub_${viewName}`
-      const desiredSql = getViewQuery(viewDef)
-      const existingSql = existingViews.get(viewName)
+    // 4. Sync queries - create, update, or leave unchanged
+    for (const [queryName, queryDef] of Object.entries(desiredQueries)) {
+      const subName = `wavelet_sub_${queryName}`
+      const desiredSql = getQuerySql(queryDef)
+      const existingSql = existingMVs.get(queryName)
 
       if (existingSql === undefined) {
-        // View does not exist - create MV and subscription
-        await this.createMaterializedView(viewName, desiredSql)
-        actions.push({ type: 'create', resource: 'view', name: viewName })
+        // MV does not exist - create MV and subscription
+        await this.createMaterializedView(queryName, desiredSql)
+        actions.push({ type: 'create', resource: 'query', name: queryName })
 
-        await this.createSubscription(subName, viewName)
+        await this.createSubscription(subName, queryName)
         actions.push({ type: 'create', resource: 'subscription', name: subName })
       } else if (normalizeSql(existingSql) !== normalizeSql(desiredSql)) {
-        // View SQL changed - drop subscription, drop MV, recreate
+        // Query SQL changed - drop subscription, drop MV, recreate
         if (existingSubscriptions.has(subName)) {
           await this.dropSubscription(subName)
-          actions.push({ type: 'delete', resource: 'subscription', name: subName, detail: 'dropped for view update' })
+          actions.push({ type: 'delete', resource: 'subscription', name: subName, detail: 'dropped for query update' })
         }
 
-        await this.dropMaterializedView(viewName)
-        actions.push({ type: 'delete', resource: 'view', name: viewName, detail: 'dropped for update' })
+        await this.dropMaterializedView(queryName)
+        actions.push({ type: 'delete', resource: 'query', name: queryName, detail: 'dropped for update' })
 
-        await this.createMaterializedView(viewName, desiredSql)
-        actions.push({ type: 'create', resource: 'view', name: viewName, detail: 'recreated with updated SQL' })
+        await this.createMaterializedView(queryName, desiredSql)
+        actions.push({ type: 'create', resource: 'query', name: queryName, detail: 'recreated with updated SQL' })
 
-        await this.createSubscription(subName, viewName)
-        actions.push({ type: 'create', resource: 'subscription', name: subName, detail: 'recreated after view update' })
+        await this.createSubscription(subName, queryName)
+        actions.push({ type: 'create', resource: 'subscription', name: subName, detail: 'recreated after query update' })
       } else {
-        // View SQL unchanged
-        actions.push({ type: 'unchanged', resource: 'view', name: viewName })
+        // Query SQL unchanged
+        actions.push({ type: 'unchanged', resource: 'query', name: queryName })
 
-        // Ensure subscription exists even if the view is unchanged
+        // Ensure subscription exists even if the query is unchanged
         if (!existingSubscriptions.has(subName)) {
-          await this.createSubscription(subName, viewName)
+          await this.createSubscription(subName, queryName)
           actions.push({ type: 'create', resource: 'subscription', name: subName })
         } else {
           actions.push({ type: 'unchanged', resource: 'subscription', name: subName })
@@ -150,19 +150,19 @@ export class DdlManager {
       }
     }
 
-    // 5. Remove views that are no longer in the config
-    for (const [existingViewName] of existingViews) {
-      if (!desiredViewNames.has(existingViewName)) {
-        const subName = `wavelet_sub_${existingViewName}`
+    // 5. Remove queries that are no longer in the config
+    for (const [existingMVName] of existingMVs) {
+      if (!desiredQueryNames.has(existingMVName)) {
+        const subName = `wavelet_sub_${existingMVName}`
 
         // Drop subscription first
         if (existingSubscriptions.has(subName)) {
           await this.dropSubscription(subName)
-          actions.push({ type: 'delete', resource: 'subscription', name: subName, detail: 'view removed from config' })
+          actions.push({ type: 'delete', resource: 'subscription', name: subName, detail: 'query removed from config' })
         }
 
-        await this.dropMaterializedView(existingViewName)
-        actions.push({ type: 'delete', resource: 'view', name: existingViewName, detail: 'removed from config' })
+        await this.dropMaterializedView(existingMVName)
+        actions.push({ type: 'delete', resource: 'query', name: existingMVName, detail: 'removed from config' })
       }
     }
 
@@ -171,32 +171,32 @@ export class DdlManager {
       // Only manage wavelet-prefixed subscriptions
       if (!existingSubName.startsWith('wavelet_sub_')) continue
 
-      const viewName = existingSubName.slice('wavelet_sub_'.length)
-      if (!desiredViewNames.has(viewName)) {
-        // Already handled in step 5 if the view existed, but handle dangling subs too
-        if (!existingViews.has(viewName)) {
+      const queryName = existingSubName.slice('wavelet_sub_'.length)
+      if (!desiredQueryNames.has(queryName)) {
+        // Already handled in step 5 if the MV existed, but handle dangling subs too
+        if (!existingMVs.has(queryName)) {
           await this.dropSubscription(existingSubName)
           actions.push({ type: 'delete', resource: 'subscription', name: existingSubName, detail: 'orphaned subscription' })
         }
       }
     }
 
-    // 7. Remove streams (tables) that are no longer in the config
+    // 7. Remove events (tables) that are no longer in the config
     for (const existingTableName of existingTables) {
-      if (!desiredStreamNames.has(existingTableName)) {
+      if (!desiredEventNames.has(existingTableName)) {
         // Only drop if no MV depends on it
-        const hasDependents = await this.tableHasDependentViews(existingTableName)
+        const hasDependents = await this.tableHasDependentMVs(existingTableName)
         if (hasDependents) {
           console.log(`[ddl-manager] Skipping drop of table "${existingTableName}" - materialized views depend on it`)
           actions.push({
             type: 'unchanged',
-            resource: 'stream',
+            resource: 'event',
             name: existingTableName,
-            detail: 'kept because dependent views exist',
+            detail: 'kept because dependent materialized views exist',
           })
         } else {
           await this.dropTable(existingTableName)
-          actions.push({ type: 'delete', resource: 'stream', name: existingTableName, detail: 'removed from config' })
+          actions.push({ type: 'delete', resource: 'event', name: existingTableName, detail: 'removed from config' })
         }
       }
     }
@@ -213,7 +213,7 @@ export class DdlManager {
     return new Set(result.rows.map((r: any) => r.table_name))
   }
 
-  private async getExistingViews(): Promise<Map<string, string>> {
+  private async getExistingMaterializedViews(): Promise<Map<string, string>> {
     const result = await this.client!.query(
       `SELECT name, definition FROM rw_catalog.rw_materialized_views WHERE schema_id = (SELECT id FROM rw_catalog.rw_schemas WHERE name = 'public')`
     )
@@ -243,7 +243,7 @@ export class DdlManager {
     return new Set(result.rows.map((r: any) => r.name))
   }
 
-  private async tableHasDependentViews(tableName: string): Promise<boolean> {
+  private async tableHasDependentMVs(tableName: string): Promise<boolean> {
     const result = await this.client!.query(
       `SELECT name FROM rw_catalog.rw_materialized_views WHERE schema_id = (SELECT id FROM rw_catalog.rw_schemas WHERE name = 'public') AND definition ILIKE $1`,
       [`%${tableName}%`]
@@ -253,8 +253,8 @@ export class DdlManager {
 
   // ── DDL operations ────────────────────────────────────────────────────
 
-  private async createTable(name: string, streamDef: StreamDef): Promise<void> {
-    const sql = buildCreateTableSql(name, streamDef)
+  private async createTable(name: string, eventDef: EventDef): Promise<void> {
+    const sql = buildCreateTableSql(name, eventDef)
     try {
       await this.client!.query(sql)
       console.log(`[ddl-manager] Created table: ${name}`)

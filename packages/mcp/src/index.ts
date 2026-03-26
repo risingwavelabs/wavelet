@@ -18,24 +18,24 @@ async function main() {
   const db = new Client({ connectionString: DATABASE_URL })
   await db.connect()
 
-  // Discover available views and streams
-  const views = await discoverViews(db)
-  const streams = await discoverStreams(db)
+  // Discover available queries and events
+  const queriesList = await discoverQueries(db)
+  const eventsList = await discoverEvents(db)
 
-  // Tool: list_views - List all available Wavelet views
+  // Tool: list_queries - List all available Wavelet queries
   server.tool(
-    'list_views',
-    'List all materialized views available in Wavelet. Returns view names and their column schemas.',
+    'list_queries',
+    'List all queries (materialized views) available in Wavelet. Returns query names and their column schemas.',
     {},
     async () => {
       const result: Record<string, { columns: { name: string; type: string }[] }> = {}
 
-      for (const viewName of views) {
+      for (const queryName of queriesList) {
         const cols = await db.query(
           `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1 ORDER BY ordinal_position`,
-          [viewName]
+          [queryName]
         )
-        result[viewName] = {
+        result[queryName] = {
           columns: cols.rows.map((r: any) => ({ name: r.column_name, type: r.data_type })),
         }
       }
@@ -46,24 +46,24 @@ async function main() {
     }
   )
 
-  // Tool: query_view - Query a materialized view
+  // Tool: query - Query a materialized view
   server.tool(
-    'query_view',
-    'Query a Wavelet materialized view. Returns the current pre-computed results. The data is always fresh - views are incrementally maintained by RisingWave.',
+    'query',
+    'Query a Wavelet query (materialized view). Returns the current pre-computed results. The data is always fresh - queries are incrementally maintained by RisingWave.',
     {
-      view: z.string().describe(`View name. Available: ${views.join(', ')}`),
+      query: z.string().describe(`Query name. Available: ${queriesList.join(', ')}`),
       filter: z.record(z.string(), z.string()).optional().describe('Optional key-value filters applied as WHERE clauses'),
       limit: z.number().optional().describe('Maximum number of rows to return (default: 100)'),
     },
-    async ({ view, filter, limit }) => {
-      if (!views.includes(view)) {
+    async ({ query, filter, limit }) => {
+      if (!queriesList.includes(query)) {
         return {
-          content: [{ type: 'text' as const, text: `View '${view}' not found. Available views: ${views.join(', ')}` }],
+          content: [{ type: 'text' as const, text: `Query '${query}' not found. Available queries: ${queriesList.join(', ')}` }],
           isError: true,
         }
       }
 
-      let sql = `SELECT * FROM ${view}`
+      let sql = `SELECT * FROM ${query}`
       const values: unknown[] = []
 
       if (filter && Object.keys(filter).length > 0) {
@@ -79,25 +79,25 @@ async function main() {
       const result = await db.query(sql, values)
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ view, rows: result.rows, count: result.rows.length }, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ query, rows: result.rows, count: result.rows.length }, null, 2) }],
       }
     }
   )
 
-  // Tool: list_streams - List available event streams
+  // Tool: list_events - List available events
   server.tool(
-    'list_streams',
-    'List all event streams available in Wavelet. Streams are tables that accept event writes.',
+    'list_events',
+    'List all events available in Wavelet. Events are tables that accept event writes.',
     {},
     async () => {
       const result: Record<string, { columns: { name: string; type: string }[] }> = {}
 
-      for (const streamName of streams) {
+      for (const eventName of eventsList) {
         const cols = await db.query(
           `SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1 ORDER BY ordinal_position`,
-          [streamName]
+          [eventName]
         )
-        result[streamName] = {
+        result[eventName] = {
           columns: cols.rows.map((r: any) => ({ name: r.column_name, type: r.data_type })),
         }
       }
@@ -108,66 +108,66 @@ async function main() {
     }
   )
 
-  // Tool: emit_event - Write an event to a stream
+  // Tool: emit_event - Write an event
   server.tool(
     'emit_event',
-    'Write an event to a Wavelet stream. The event will be processed by RisingWave and any materialized views that depend on this stream will be updated automatically.',
+    'Write an event to a Wavelet event table. The event will be processed by RisingWave and any queries that depend on this event table will be updated automatically.',
     {
-      stream: z.string().describe(`Stream name. Available: ${streams.join(', ')}`),
-      data: z.record(z.string(), z.unknown()).describe('Event data as key-value pairs matching the stream columns'),
+      event: z.string().describe(`Event name. Available: ${eventsList.join(', ')}`),
+      data: z.record(z.string(), z.unknown()).describe('Event data as key-value pairs matching the event columns'),
     },
-    async ({ stream, data }) => {
-      if (!streams.includes(stream)) {
+    async ({ event, data }) => {
+      if (!eventsList.includes(event)) {
         return {
-          content: [{ type: 'text' as const, text: `Stream '${stream}' not found. Available streams: ${streams.join(', ')}` }],
+          content: [{ type: 'text' as const, text: `Event '${event}' not found. Available events: ${eventsList.join(', ')}` }],
           isError: true,
         }
       }
 
       const cols = await db.query(
         `SELECT column_name FROM information_schema.columns WHERE table_name = $1 ORDER BY ordinal_position`,
-        [stream]
+        [event]
       )
       const columnNames = cols.rows.map((r: any) => r.column_name)
       const values = columnNames.map((col: string) => data[col])
       const placeholders = columnNames.map((_: string, i: number) => `$${i + 1}`)
 
       await db.query(
-        `INSERT INTO ${stream} (${columnNames.join(', ')}) VALUES (${placeholders.join(', ')})`,
+        `INSERT INTO ${event} (${columnNames.join(', ')}) VALUES (${placeholders.join(', ')})`,
         values
       )
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, stream, columns: columnNames }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, event, columns: columnNames }) }],
       }
     }
   )
 
-  // Tool: emit_batch - Write multiple events to a stream
+  // Tool: emit_batch - Write multiple events
   server.tool(
     'emit_batch',
-    'Write multiple events to a Wavelet stream in one call. More efficient than calling emit_event repeatedly.',
+    'Write multiple events to a Wavelet event table in one call. More efficient than calling emit_event repeatedly.',
     {
-      stream: z.string().describe(`Stream name. Available: ${streams.join(', ')}`),
+      event: z.string().describe(`Event name. Available: ${eventsList.join(', ')}`),
       events: z.array(z.record(z.string(), z.unknown())).describe('Array of event data objects'),
     },
-    async ({ stream, events }) => {
-      if (!streams.includes(stream)) {
+    async ({ event, events }) => {
+      if (!eventsList.includes(event)) {
         return {
-          content: [{ type: 'text' as const, text: `Stream '${stream}' not found. Available streams: ${streams.join(', ')}` }],
+          content: [{ type: 'text' as const, text: `Event '${event}' not found. Available events: ${eventsList.join(', ')}` }],
           isError: true,
         }
       }
 
       const cols = await db.query(
         `SELECT column_name FROM information_schema.columns WHERE table_name = $1 ORDER BY ordinal_position`,
-        [stream]
+        [event]
       )
       const columnNames = cols.rows.map((r: any) => r.column_name)
 
       if (events.length === 0) {
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, stream, count: 0 }) }],
+          content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, event, count: 0 }) }],
         }
       }
 
@@ -186,21 +186,21 @@ async function main() {
       }
 
       await db.query(
-        `INSERT INTO ${stream} (${columnNames.join(', ')}) VALUES ${rowPlaceholders.join(', ')}`,
+        `INSERT INTO ${event} (${columnNames.join(', ')}) VALUES ${rowPlaceholders.join(', ')}`,
         allValues
       )
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, stream, count: events.length }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, event, count: events.length }) }],
       }
     }
   )
 
   // Tool: run_sql - Execute a read-only SQL query (scoped to known tables)
-  const allowedTables = [...views, ...streams]
+  const allowedTables = [...queriesList, ...eventsList]
   server.tool(
     'run_sql',
-    `Execute a read-only SQL query. Only SELECT statements are allowed, and queries may only reference known views and streams: ${allowedTables.join(', ')}.`,
+    `Execute a read-only SQL query. Only SELECT statements are allowed, and queries may only reference known queries and events: ${allowedTables.join(', ')}.`,
     {
       sql: z.string().describe('SQL SELECT query to execute'),
     },
@@ -243,7 +243,7 @@ async function main() {
   await server.connect(transport)
 }
 
-async function discoverViews(db: InstanceType<typeof Client>): Promise<string[]> {
+async function discoverQueries(db: InstanceType<typeof Client>): Promise<string[]> {
   try {
     const result = await db.query(
       `SELECT name FROM rw_catalog.rw_materialized_views WHERE schema_id = (SELECT id FROM rw_catalog.rw_schemas WHERE name = 'public')`
@@ -254,7 +254,7 @@ async function discoverViews(db: InstanceType<typeof Client>): Promise<string[]>
   }
 }
 
-async function discoverStreams(db: InstanceType<typeof Client>): Promise<string[]> {
+async function discoverEvents(db: InstanceType<typeof Client>): Promise<string[]> {
   try {
     const result = await db.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE'`

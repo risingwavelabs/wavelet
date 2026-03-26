@@ -36,15 +36,15 @@ function request(server: http.Server, method: string, path: string, body?: unkno
 }
 
 describe('HttpApi', () => {
-  const streams = {
-    events: { columns: { user_id: 'string' as const, value: 'int' as const } },
+  const events = {
+    game_events: { columns: { user_id: 'string' as const, value: 'int' as const } },
   }
-  const views = {
+  const queries = {
     leaderboard: { _tag: 'sql' as const, text: 'SELECT 1' },
   }
 
   it('returns health check', async () => {
-    const api = new HttpApi('postgres://dummy', streams, views)
+    const api = new HttpApi('postgres://dummy', events, queries)
     const server = await createTestServer(api)
     try {
       const res = await request(server, 'GET', '/v1/health')
@@ -55,32 +55,32 @@ describe('HttpApi', () => {
     }
   })
 
-  it('lists available views', async () => {
-    const api = new HttpApi('postgres://dummy', streams, views)
+  it('lists available queries', async () => {
+    const api = new HttpApi('postgres://dummy', events, queries)
     const server = await createTestServer(api)
     try {
-      const res = await request(server, 'GET', '/v1/views')
+      const res = await request(server, 'GET', '/v1/queries')
       expect(res.status).toBe(200)
-      expect(res.data).toEqual({ views: ['leaderboard'] })
+      expect(res.data).toEqual({ queries: ['leaderboard'] })
     } finally {
       server.close()
     }
   })
 
-  it('lists available streams', async () => {
-    const api = new HttpApi('postgres://dummy', streams, views)
+  it('lists available events', async () => {
+    const api = new HttpApi('postgres://dummy', events, queries)
     const server = await createTestServer(api)
     try {
-      const res = await request(server, 'GET', '/v1/streams')
+      const res = await request(server, 'GET', '/v1/events')
       expect(res.status).toBe(200)
-      expect(res.data).toEqual({ streams: ['events'] })
+      expect(res.data).toEqual({ events: ['game_events'] })
     } finally {
       server.close()
     }
   })
 
   it('returns 404 for unknown routes with helpful message', async () => {
-    const api = new HttpApi('postgres://dummy', streams, views)
+    const api = new HttpApi('postgres://dummy', events, queries)
     const server = await createTestServer(api)
     try {
       const res = await request(server, 'GET', '/v1/nonexistent')
@@ -94,35 +94,35 @@ describe('HttpApi', () => {
   })
 
   it('handles CORS preflight', async () => {
-    const api = new HttpApi('postgres://dummy', streams, views)
+    const api = new HttpApi('postgres://dummy', events, queries)
     const server = await createTestServer(api)
     try {
-      const res = await request(server, 'OPTIONS', '/v1/views')
+      const res = await request(server, 'OPTIONS', '/v1/queries')
       expect(res.status).toBe(204)
     } finally {
       server.close()
     }
   })
 
-  it('returns 404 for unknown stream', async () => {
-    const api = new HttpApi('postgres://dummy', streams, views)
+  it('returns 404 for unknown event', async () => {
+    const api = new HttpApi('postgres://dummy', events, queries)
     const server = await createTestServer(api)
     try {
-      const res = await request(server, 'POST', '/v1/streams/nonexistent', { x: 1 })
+      const res = await request(server, 'POST', '/v1/events/nonexistent', { x: 1 })
       expect(res.status).toBe(404)
-      expect(res.data.available_streams).toEqual(['events'])
+      expect(res.data.available_events).toEqual(['game_events'])
     } finally {
       server.close()
     }
   })
 
-  it('returns 404 for unknown view', async () => {
-    const api = new HttpApi('postgres://dummy', streams, views)
+  it('returns 404 for unknown query', async () => {
+    const api = new HttpApi('postgres://dummy', events, queries)
     const server = await createTestServer(api)
     try {
-      const res = await request(server, 'GET', '/v1/views/nonexistent')
+      const res = await request(server, 'GET', '/v1/queries/nonexistent')
       expect(res.status).toBe(404)
-      expect(res.data.available_views).toEqual(['leaderboard'])
+      expect(res.data.available_queries).toEqual(['leaderboard'])
     } finally {
       server.close()
     }

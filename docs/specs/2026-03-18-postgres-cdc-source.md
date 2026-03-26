@@ -23,7 +23,7 @@ export default defineConfig({
       publicationName: 'wavelet_mydb_pub' // optional, default: wavelet_{sourceName}_pub
     }
   },
-  views: {
+  queries: {
     order_totals: sql`
       SELECT user_id, SUM(amount) AS total_spent
       FROM mydb_orders

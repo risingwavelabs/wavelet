@@ -36,7 +36,7 @@ const SUB_NAME = `wavelet_sub_${VIEW_NAME}`
 
 const testConfig: WaveletConfig = {
   database: DATABASE_URL,
-  streams: {
+  events: {
     [STREAM_NAME]: {
       columns: {
         user_id: 'string',
@@ -44,7 +44,7 @@ const testConfig: WaveletConfig = {
       },
     },
   },
-  views: {
+  queries: {
     [VIEW_NAME]: sql`
       SELECT user_id, SUM(value) AS total_value, COUNT(*) AS event_count
       FROM ${STREAM_NAME}
@@ -75,17 +75,17 @@ describe.runIf(process.env.WAVELET_INTEGRATION === '1')('Integration: DDL Manage
     await ddl.close()
   })
 
-  it('creates tables, views, and subscriptions', async () => {
+  it('creates tables, materialized views, and subscriptions', async () => {
     const actions = await ddl.sync(testConfig)
 
     const creates = actions.filter(a => a.type === 'create')
-    expect(creates.length).toBeGreaterThanOrEqual(3) // stream + view + subscription
+    expect(creates.length).toBeGreaterThanOrEqual(3) // event + query + subscription
 
-    const streamAction = creates.find(a => a.resource === 'stream' && a.name === STREAM_NAME)
-    expect(streamAction).toBeDefined()
+    const eventAction = creates.find(a => a.resource === 'event' && a.name === STREAM_NAME)
+    expect(eventAction).toBeDefined()
 
-    const viewAction = creates.find(a => a.resource === 'view' && a.name === VIEW_NAME)
-    expect(viewAction).toBeDefined()
+    const queryAction = creates.find(a => a.resource === 'query' && a.name === VIEW_NAME)
+    expect(queryAction).toBeDefined()
 
     const subAction = creates.find(a => a.resource === 'subscription' && a.name === SUB_NAME)
     expect(subAction).toBeDefined()
@@ -162,15 +162,15 @@ describe.runIf(process.env.WAVELET_INTEGRATION === '1')('Integration: Full Serve
     expect(data.status).toBe('ok')
   })
 
-  it('lists views', async () => {
-    const res = await fetch(`http://localhost:${port}/v1/views`)
+  it('lists queries', async () => {
+    const res = await fetch(`http://localhost:${port}/v1/queries`)
     const data = await res.json()
-    expect(data.views).toContain(VIEW_NAME)
+    expect(data.queries).toContain(VIEW_NAME)
   })
 
-  it('writes events via HTTP and reads view', async () => {
+  it('writes events via HTTP and reads query', async () => {
     // Write events
-    await fetch(`http://localhost:${port}/v1/streams/${STREAM_NAME}`, {
+    await fetch(`http://localhost:${port}/v1/events/${STREAM_NAME}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: 'integration_test', value: 42 }),
@@ -179,8 +179,8 @@ describe.runIf(process.env.WAVELET_INTEGRATION === '1')('Integration: Full Serve
     // Wait for MV update
     await new Promise(r => setTimeout(r, 2000))
 
-    // Read view
-    const res = await fetch(`http://localhost:${port}/v1/views/${VIEW_NAME}`)
+    // Read query
+    const res = await fetch(`http://localhost:${port}/v1/queries/${VIEW_NAME}`)
     const data = await res.json()
     expect(data.rows.length).toBeGreaterThan(0)
   })
@@ -193,7 +193,7 @@ describe.runIf(process.env.WAVELET_INTEGRATION === '1')('Integration: Full Serve
         const msg = JSON.parse(data.toString())
         if (msg.type === 'connected') {
           // Write event to trigger diff
-          fetch(`http://localhost:${port}/v1/streams/${STREAM_NAME}`, {
+          fetch(`http://localhost:${port}/v1/events/${STREAM_NAME}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: 'ws_test_user', value: 7 }),

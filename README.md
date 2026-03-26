@@ -14,7 +14,7 @@ Wavelet lets you define a computation in SQL and subscribe to its result. When t
 
 ```typescript
 // Define what to compute
-views: {
+queries: {
   revenue: {
     query: sql`SELECT tenant_id, SUM(amount) AS total FROM orders GROUP BY tenant_id`,
     filterBy: 'tenant_id',
@@ -32,7 +32,7 @@ Built on [RisingWave](https://github.com/risingwavelabs/risingwave). By the Risi
 
 ### Real-time SaaS Dashboards
 
-Your customers log in and see their own metrics updating live -- revenue, active users, API usage. One view definition, thousands of tenants, each isolated by JWT. Replaces a polling endpoint + cache + per-tenant auth check.
+Your customers log in and see their own metrics updating live -- revenue, active users, API usage. One query definition, thousands of tenants, each isolated by JWT. Replaces a polling endpoint + cache + per-tenant auth check.
 
 ### Usage Metering and Billing
 
@@ -40,7 +40,7 @@ Stream API calls, aggregate tokens and cost per customer, push to both customer-
 
 ### Proactive Agents
 
-AI agents subscribe to computed views via MCP and act autonomously when conditions change. An agent watches `sla_violations` -- rows appear when an order exceeds its SLA, disappear when resolved. The agent escalates, notifies, or triggers a remediation. No polling, no cron -- the agent reacts to computed state, not raw events.
+AI agents subscribe to computed queries via MCP and act autonomously when conditions change. An agent watches `sla_violations` -- rows appear when an order exceeds its SLA, disappear when resolved. The agent escalates, notifies, or triggers a remediation. No polling, no cron -- the agent reacts to computed state, not raw events.
 
 ## Quick Start
 
@@ -62,7 +62,7 @@ import { defineConfig, sql } from '@risingwave/wavelet'
 export default defineConfig({
   database: 'postgres://root@localhost:4566/dev',
 
-  streams: {
+  events: {
     game_events: {
       columns: {
         player_id: 'string',
@@ -72,7 +72,7 @@ export default defineConfig({
     }
   },
 
-  views: {
+  queries: {
     leaderboard: sql`
       SELECT player_id, SUM(score) AS total_score, COUNT(*) AS games_played
       FROM game_events
@@ -111,17 +111,17 @@ import { TypedWaveletClient } from './.wavelet/client'
 const wavelet = new TypedWaveletClient({ url: 'http://localhost:8080' })
 
 // read current state
-const rows = await wavelet.views.leaderboard.get()
+const rows = await wavelet.queries.leaderboard.get()
 
 // subscribe to live updates
-wavelet.views.leaderboard.subscribe({
+wavelet.queries.leaderboard.subscribe({
   onData: (diff) => {
     console.log(diff.inserted, diff.updated, diff.deleted)
   }
 })
 
 // write events
-await wavelet.streams.game_events.emit({
+await wavelet.events.game_events.emit({
   player_id: 'alice',
   score: 42,
   event_type: 'win',
@@ -130,7 +130,7 @@ await wavelet.streams.game_events.emit({
 
 ## Agent Integration (MCP)
 
-AI agents query views and write events as tool calls.
+AI agents query and write events as tool calls.
 
 ```json
 {
@@ -148,10 +148,10 @@ AI agents query views and write events as tool calls.
 
 | Tool | Description |
 |---|---|
-| `list_views` | List all materialized views with schemas |
-| `query_view` | Query a view with optional filters |
-| `list_streams` | List all event streams |
-| `emit_event` | Write an event to a stream |
+| `list_queries` | List all queries (materialized views) with schemas |
+| `query` | Query a materialized view with optional filters |
+| `list_events` | List all event tables |
+| `emit_event` | Write an event |
 | `emit_batch` | Write a batch of events |
 | `run_sql` | Execute a read-only SQL query |
 
@@ -172,17 +172,17 @@ App / Agent  <-  WebSocket  <-  Wavelet Server  <-  SQL cursor  <-  RisingWave
                                 + fan-out                       computation
 ```
 
-**Write path.** `POST /v1/streams/{name}` inserts directly into RisingWave. No queue, no buffer. 200 means the row is persisted. RisingWave recomputes affected views on its next barrier cycle (~1s by default), and Wavelet pushes the diff to subscribers. End-to-end latency from write to client update is typically 1-2 seconds.
+**Write path.** `POST /v1/events/{name}` inserts directly into RisingWave. No queue, no buffer. 200 means the row is persisted. RisingWave recomputes affected materialized views on its next barrier cycle (~1s by default), and Wavelet pushes the diff to subscribers. End-to-end latency from write to client update is typically 1-2 seconds.
 
 **Stateless server.** Wavelet holds no persistent state. Cursor positions are in memory. On restart, cursors recover from RisingWave's subscription retention window (default 24h). During recovery, clients may receive duplicate diffs -- applications should handle updates idempotently (e.g. key by primary key, not append).
 
-**Single cursor per view.** One subscription cursor feeds all connected clients. 1 client or 10,000 -- same RisingWave load.
+**Single cursor per query.** One subscription cursor feeds all connected clients. 1 client or 10,000 -- same RisingWave load.
 
 **Config-driven DDL.** `wavelet.config.ts` is the source of truth. `wavelet dev` and `wavelet push` diff config against RisingWave and apply minimal changes (create/drop tables, materialized views, subscriptions).
 
-**JWT-scoped delivery.** Views with `filterBy` match the column value against a JWT claim. Filtering is enforced server-side -- clients cannot override it. Views without `filterBy` broadcast all rows to all clients. For multi-tenant applications, omitting `filterBy` on a tenant-scoped view is a data leak -- Wavelet does not enforce this automatically.
+**JWT-scoped delivery.** Queries with `filterBy` match the column value against a JWT claim. Filtering is enforced server-side -- clients cannot override it. Queries without `filterBy` broadcast all rows to all clients. For multi-tenant applications, omitting `filterBy` on a tenant-scoped query is a data leak -- Wavelet does not enforce this automatically.
 
-**Failure modes.** If RisingWave goes down, cursor fetch returns an error and Wavelet retries after 1 second. Clients stay connected but receive no diffs until RisingWave recovers. If a WebSocket disconnects, the SDK reconnects with exponential backoff (1s to 30s) and resumes from the last cursor position. Each view has its own cursor and connection -- a slow view does not block other views.
+**Failure modes.** If RisingWave goes down, cursor fetch returns an error and Wavelet retries after 1 second. Clients stay connected but receive no diffs until RisingWave recovers. If a WebSocket disconnects, the SDK reconnects with exponential backoff (1s to 30s) and resumes from the last cursor position. Each query has its own cursor and connection -- a slow query does not block other queries.
 
 ## CLI
 
@@ -199,14 +199,14 @@ All commands are idempotent. Supports `--json` for structured output.
 ## HTTP API
 
 ```
-GET  /v1/health                  -> { status: "ok" }
-GET  /v1/views                   -> list all views
-GET  /v1/views/{name}            -> current rows
-GET  /v1/views/{name}?key=value  -> filtered rows
-GET  /v1/streams                 -> list all streams
-POST /v1/streams/{name}          -> write single event
-POST /v1/streams/{name}/batch    -> write batch of events
-WS   /subscribe/{name}           -> real-time diffs
+GET  /v1/health                    -> { status: "ok" }
+GET  /v1/queries                   -> list all queries
+GET  /v1/queries/{name}            -> current rows
+GET  /v1/queries/{name}?key=value  -> filtered rows
+GET  /v1/events                    -> list all events
+POST /v1/events/{name}             -> write single event
+POST /v1/events/{name}/batch       -> write batch of events
+WS   /subscribe/{name}             -> real-time diffs
 ```
 
 ## License

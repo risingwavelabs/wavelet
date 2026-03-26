@@ -12,6 +12,7 @@
   "include": [
     "src/client.ts",
     "src/types.ts",
-    "src/index.browser.ts"
+    "src/index.browser.ts",
+    "src/react.ts"
   ]
 }

@@ -246,11 +246,44 @@
     import { createRoot } from 'https://esm.sh/react-dom@18/client'
     import { initWavelet, useWavelet, getClient } from '../../packages/sdk/browser/react.js'
 
-    initWavelet({ url: 'http://localhost:8080' })
-    const gameEvents = getClient().stream('game_events')
+    initWavelet({ url: window.location.hostname === 'localhost' ? 'http://localhost:8080' : `http://${window.location.hostname}:8080` })
+    const gameEvents = getClient().event('game_events')
     const players = ['alice', 'bob', 'charlie', 'dave', 'eve', 'frank', 'grace', 'heidi']
 
     const e = React.createElement
+
+    function AnimatedNumber({ value }) {
+      const [display, setDisplay] = React.useState(value)
+      const ref = React.useRef({ current: value, target: value, raf: null })
+
+      React.useEffect(() => {
+        const r = ref.current
+        r.target = value
+        if (r.raf) return
+
+        const start = r.current
+        const startTime = performance.now()
+        const duration = 350
+
+        function tick(now) {
+          const t = Math.min((now - startTime) / duration, 1)
+          const eased = 1 - Math.pow(1 - t, 3)
+          r.current = Math.round(start + (r.target - start) * eased)
+          setDisplay(r.current)
+          if (t < 1) {
+            r.raf = requestAnimationFrame(tick)
+          } else {
+            r.raf = null
+            r.current = r.target
+            setDisplay(r.target)
+          }
+        }
+        r.raf = requestAnimationFrame(tick)
+        return () => { if (r.raf) { cancelAnimationFrame(r.raf); r.raf = null } }
+      }, [value])
+
+      return e('span', null, display.toLocaleString())
+    }
 
     function StatusBadge({ status }) {
       const className = `status ${status.kind}`
@@ -282,8 +315,8 @@
             }, [
               e('td', { key: 'rank', className: 'rank' }, index + 1),
               e('td', { key: 'player' }, row.player_id),
-              e('td', { key: 'score', className: 'score' }, Number(row.total_score || 0)),
-              e('td', { key: 'games' }, Number(row.games_played || 0)),
+              e('td', { key: 'score', className: 'score' }, e(AnimatedNumber, { value: Number(row.total_score || 0) })),
+              e('td', { key: 'games' }, e(AnimatedNumber, { value: Number(row.games_played || 0) })),
             ])
           )
         ),

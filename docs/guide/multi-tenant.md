@@ -4,7 +4,7 @@ Wavelet supports per-tenant data isolation using JWT claims. This lets you build
 
 ## How it works
 
-1. Define a view with a `filterBy` column
+1. Define a query with a `filterBy` column
 2. Configure JWT verification in your config
 3. Clients connect with a JWT token
 4. Wavelet extracts the claim from the token and filters diffs server-side
@@ -27,7 +27,7 @@ export default defineConfig({
     // audience: 'your-app',
   },
 
-  streams: {
+  events: {
     llm_events: {
       columns: {
         tenant_id: 'string',
@@ -38,7 +38,7 @@ export default defineConfig({
     }
   },
 
-  views: {
+  queries: {
     tenant_usage: {
       query: sql`
         SELECT tenant_id, SUM(tokens) AS total_tokens, SUM(cost_usd) AS total_cost
@@ -62,7 +62,7 @@ const client = new WaveletClient({
 })
 
 // This client only receives diffs where tenant_id = "t1"
-client.view('tenant_usage').subscribe({
+client.query('tenant_usage').subscribe({
   onData: (diff) => {
     console.log('My usage:', diff)
   },
@@ -81,9 +81,9 @@ Or as an Authorization header (depends on your WebSocket client).
 
 ## How filtering works internally
 
-1. Wavelet maintains a single RisingWave subscription cursor per view (not per tenant)
+1. Wavelet maintains a single RisingWave subscription cursor per query (not per tenant)
 2. When a diff arrives, Wavelet checks each connected client's JWT claims
-3. For views with `filterBy`, only rows matching the client's claim value are forwarded
+3. For queries with `filterBy`, only rows matching the client's claim value are forwarded
 4. Clients with no matching claim receive nothing (empty diffs are not sent)
 
 This means adding more tenants does not increase load on RisingWave. The filtering happens in Wavelet's memory, after the cursor fetch.

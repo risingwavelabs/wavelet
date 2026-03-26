@@ -58,7 +58,7 @@ describe('WaveletClient', () => {
     })
   })
 
-  describe('view().get()', () => {
+  describe('query().get()', () => {
     let fetchSpy: ReturnType<typeof vi.fn>
 
     beforeEach(() => {
@@ -70,20 +70,20 @@ describe('WaveletClient', () => {
       vi.unstubAllGlobals()
     })
 
-    it('fetches view data', async () => {
+    it('fetches query data', async () => {
       fetchSpy.mockResolvedValue({
         ok: true,
         json: async () => ({ rows: [{ id: 1, name: 'test' }] }),
       })
 
       const client = new WaveletClient({ url: 'http://localhost:8080' })
-      const result = await client.view('leaderboard').get()
+      const result = await client.query('leaderboard').get()
 
       expect(result).toEqual([{ id: 1, name: 'test' }])
       expect(fetchSpy).toHaveBeenCalledOnce()
 
       const calledUrl = fetchSpy.mock.calls[0][0]
-      expect(calledUrl).toBe('http://localhost:8080/v1/views/leaderboard')
+      expect(calledUrl).toBe('http://localhost:8080/v1/queries/leaderboard')
     })
 
     it('passes query params as filters', async () => {
@@ -93,7 +93,7 @@ describe('WaveletClient', () => {
       })
 
       const client = new WaveletClient({ url: 'http://localhost:8080' })
-      await client.view('usage').get({ tenant_id: 't1' })
+      await client.query('usage').get({ tenant_id: 't1' })
 
       const calledUrl = fetchSpy.mock.calls[0][0]
       expect(calledUrl).toContain('tenant_id=t1')
@@ -106,24 +106,24 @@ describe('WaveletClient', () => {
       })
 
       const client = new WaveletClient({ url: 'http://localhost:8080', token: 'my-jwt' })
-      await client.view('leaderboard').get()
+      await client.query('leaderboard').get()
 
       const headers = fetchSpy.mock.calls[0][1].headers
       expect(headers['Authorization']).toBe('Bearer my-jwt')
     })
 
-    it('throws VIEW_NOT_FOUND on 404', async () => {
+    it('throws QUERY_NOT_FOUND on 404', async () => {
       fetchSpy.mockResolvedValue({
         ok: false,
         status: 404,
-        json: async () => ({ error: "View 'nope' not found" }),
+        json: async () => ({ error: "Query 'nope' not found" }),
       })
 
       const client = new WaveletClient({ url: 'http://localhost:8080' })
 
-      await expect(client.view('nope').get()).rejects.toThrow(WaveletError)
-      await expect(client.view('nope').get()).rejects.toMatchObject({
-        code: 'VIEW_NOT_FOUND',
+      await expect(client.query('nope').get()).rejects.toThrow(WaveletError)
+      await expect(client.query('nope').get()).rejects.toMatchObject({
+        code: 'QUERY_NOT_FOUND',
       })
     })
 
@@ -136,7 +136,7 @@ describe('WaveletClient', () => {
 
       const client = new WaveletClient({ url: 'http://localhost:8080' })
 
-      await expect(client.view('leaderboard').get()).rejects.toMatchObject({
+      await expect(client.query('leaderboard').get()).rejects.toMatchObject({
         code: 'AUTH_ERROR',
       })
     })
@@ -150,13 +150,13 @@ describe('WaveletClient', () => {
 
       const client = new WaveletClient({ url: 'http://localhost:8080' })
 
-      await expect(client.view('leaderboard').get()).rejects.toMatchObject({
+      await expect(client.query('leaderboard').get()).rejects.toMatchObject({
         code: 'SERVER_ERROR',
       })
     })
   })
 
-  describe('stream().emit()', () => {
+  describe('event().emit()', () => {
     let fetchSpy: ReturnType<typeof vi.fn>
 
     beforeEach(() => {
@@ -172,11 +172,11 @@ describe('WaveletClient', () => {
       fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
 
       const client = new WaveletClient({ url: 'http://localhost:8080' })
-      await client.stream('events').emit({ user_id: 'u1', score: 42 })
+      await client.event('game_events').emit({ user_id: 'u1', score: 42 })
 
       expect(fetchSpy).toHaveBeenCalledOnce()
       const [url, opts] = fetchSpy.mock.calls[0]
-      expect(url).toBe('http://localhost:8080/v1/streams/events')
+      expect(url).toBe('http://localhost:8080/v1/events/game_events')
       expect(opts.method).toBe('POST')
       expect(JSON.parse(opts.body)).toEqual({ user_id: 'u1', score: 42 })
     })
@@ -185,21 +185,21 @@ describe('WaveletClient', () => {
       fetchSpy.mockResolvedValue({ ok: true, json: async () => ({ ok: true, count: 2 }) })
 
       const client = new WaveletClient({ url: 'http://localhost:8080' })
-      await client.stream('events').emitBatch([{ a: 1 }, { a: 2 }])
+      await client.event('game_events').emitBatch([{ a: 1 }, { a: 2 }])
 
       const [url, opts] = fetchSpy.mock.calls[0]
-      expect(url).toBe('http://localhost:8080/v1/streams/events/batch')
+      expect(url).toBe('http://localhost:8080/v1/events/game_events/batch')
       expect(JSON.parse(opts.body)).toEqual([{ a: 1 }, { a: 2 }])
     })
 
     it('throws on error response', async () => {
       fetchSpy.mockResolvedValue({
         ok: false,
-        json: async () => ({ error: "Stream 'nope' not found" }),
+        json: async () => ({ error: "Event 'nope' not found" }),
       })
 
       const client = new WaveletClient({ url: 'http://localhost:8080' })
-      await expect(client.stream('nope').emit({ x: 1 })).rejects.toThrow(WaveletError)
+      await expect(client.event('nope').emit({ x: 1 })).rejects.toThrow(WaveletError)
     })
   })
 })

@@ -14,7 +14,7 @@ Wavelet is a thin orchestration layer on top of RisingWave. It does not do compu
 1. **WebSocket fanout** - wraps RisingWave's `FETCH cursor` loop into persistent WebSocket connections
 2. **JWT-based result filtering** - extracts claims from client tokens, filters diffs server-side before forwarding
 3. **HTTP event write API** - accepts JSON over HTTP, writes to RisingWave tables
-4. **Typed SDKs** - TypeScript client with React hooks, codegen from view schemas
+4. **Typed SDKs** - TypeScript client with React hooks, codegen from query schemas
 
 ## Key Decisions
 
@@ -28,17 +28,17 @@ Wavelet maintains one RisingWave subscription cursor per materialized view, not 
 
 ### Single-tenant process
 
-The open-source Wavelet server is a single-tenant process: one connection string, one set of views. Multi-tenancy (database-level isolation, resource groups) is handled by Wavelet Cloud externally.
+The open-source Wavelet server is a single-tenant process: one connection string, one set of queries. Multi-tenancy (database-level isolation, resource groups) is handled by Wavelet Cloud externally.
 
 ### Agent-native DX
 
-The SDK uses codegen (`npx wavelet generate`) to produce fully typed clients. View and stream names are literal types, not strings. This makes the SDK usable by AI coding agents through type inference alone.
+The SDK uses codegen (`npx wavelet generate`) to produce fully typed clients. Query and event names are literal types, not strings. This makes the SDK usable by AI coding agents through type inference alone.
 
 ## Trade-offs
 
 - **No streaming writes**: HTTP write API is request-response, not streaming. Sufficient for app developers; high-throughput pipelines should use RisingWave directly.
 - **In-memory cursor state**: Cursor positions are held in memory. On restart, they recover from RisingWave's subscription retention window. Some diffs may be replayed.
-- **SQL in config**: Views are defined as raw SQL strings in the config file. This gives full SQL expressiveness but no compile-time validation of the SQL itself.
+- **SQL in config**: Queries are defined as raw SQL strings in the config file. This gives full SQL expressiveness but no compile-time validation of the SQL itself.
 
 ## Multi-tenancy Architecture (for Wavelet Cloud)
 

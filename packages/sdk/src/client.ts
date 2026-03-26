@@ -1,4 +1,4 @@
-import type { WaveletClientOptions, ViewHandle, StreamHandle, SubscribeHandlers, Diff, Unsubscribe } from './types.js'
+import type { WaveletClientOptions, QueryHandle, EventHandle, SubscribeHandlers, Diff, Unsubscribe } from './types.js'
 import { WaveletError } from './types.js'
 
 export class WaveletClient {
@@ -25,22 +25,32 @@ export class WaveletClient {
     }
   }
 
-  view<T = Record<string, unknown>>(name: string): ViewHandle<T> {
+  query<T = Record<string, unknown>>(name: string): QueryHandle<T> {
     return {
-      get: (params) => this.getView<T>(name, params),
-      subscribe: (handlers) => this.subscribeView<T>(name, handlers),
+      get: (params) => this.getQuery<T>(name, params),
+      subscribe: (handlers) => this.subscribeQuery<T>(name, handlers),
     }
   }
 
-  stream<T = Record<string, unknown>>(name: string): StreamHandle<T> {
+  /** @deprecated Use query() instead */
+  view<T = Record<string, unknown>>(name: string): QueryHandle<T> {
+    return this.query<T>(name)
+  }
+
+  event<T = Record<string, unknown>>(name: string): EventHandle<T> {
     return {
       emit: (data) => this.emitEvent(name, data),
       emitBatch: (data) => this.emitBatch(name, data),
     }
   }
 
-  private async getView<T>(name: string, params?: Record<string, string>): Promise<T[]> {
-    const url = new URL(`${this.baseUrl}/v1/views/${name}`)
+  /** @deprecated Use event() instead */
+  stream<T = Record<string, unknown>>(name: string): EventHandle<T> {
+    return this.event<T>(name)
+  }
+
+  private async getQuery<T>(name: string, params?: Record<string, string>): Promise<T[]> {
+    const url = new URL(`${this.baseUrl}/v1/queries/${name}`)
     if (params) {
       for (const [k, v] of Object.entries(params)) {
         url.searchParams.set(k, v)
@@ -56,7 +66,7 @@ export class WaveletClient {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      if (res.status === 404) throw new WaveletError(body.error ?? `View '${name}' not found`, 'VIEW_NOT_FOUND')
+      if (res.status === 404) throw new WaveletError(body.error ?? `Query '${name}' not found`, 'QUERY_NOT_FOUND')
       if (res.status === 401) throw new WaveletError(body.error ?? 'Authentication required', 'AUTH_ERROR')
       throw new WaveletError(body.error ?? `Server error: ${res.status}`, 'SERVER_ERROR')
     }
@@ -65,7 +75,7 @@ export class WaveletClient {
     return data.rows as T[]
   }
 
-  private subscribeView<T>(name: string, handlers: SubscribeHandlers<T>): Unsubscribe {
+  private subscribeQuery<T>(name: string, handlers: SubscribeHandlers<T>): Unsubscribe {
     let ws: WebSocket | null = null
     let closed = false
     let reconnectAttempt = 0
@@ -139,13 +149,13 @@ export class WaveletClient {
     }
   }
 
-  private async emitEvent(streamName: string, data: unknown): Promise<void> {
+  private async emitEvent(eventName: string, data: unknown): Promise<void> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (this.tokenProvider) {
       headers['Authorization'] = `Bearer ${await this.tokenProvider()}`
     }
 
-    const res = await fetch(`${this.baseUrl}/v1/streams/${streamName}`, {
+    const res = await fetch(`${this.baseUrl}/v1/events/${eventName}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
@@ -153,17 +163,17 @@ export class WaveletClient {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new WaveletError(body.error ?? `Failed to emit to '${streamName}'`, 'SERVER_ERROR')
+      throw new WaveletError(body.error ?? `Failed to emit to '${eventName}'`, 'SERVER_ERROR')
     }
   }
 
-  private async emitBatch(streamName: string, data: unknown[]): Promise<void> {
+  private async emitBatch(eventName: string, data: unknown[]): Promise<void> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (this.tokenProvider) {
       headers['Authorization'] = `Bearer ${await this.tokenProvider()}`
     }
 
-    const res = await fetch(`${this.baseUrl}/v1/streams/${streamName}/batch`, {
+    const res = await fetch(`${this.baseUrl}/v1/events/${eventName}/batch`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data),
@@ -171,7 +181,7 @@ export class WaveletClient {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new WaveletError(body.error ?? `Failed to batch emit to '${streamName}'`, 'SERVER_ERROR')
+      throw new WaveletError(body.error ?? `Failed to batch emit to '${eventName}'`, 'SERVER_ERROR')
     }
   }
 }

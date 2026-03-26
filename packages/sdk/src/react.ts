@@ -31,7 +31,7 @@ export interface UseWaveletResult<T> {
 }
 
 export function useWavelet<T = Record<string, unknown>>(
-  viewName: string,
+  queryName: string,
   options?: UseWaveletOptions
 ): UseWaveletResult<T> {
   const [data, setData] = useState<T[]>([])
@@ -46,7 +46,7 @@ export function useWavelet<T = Record<string, unknown>>(
     let cancelled = false
 
     // Initial fetch
-    client.view<T>(viewName).get(params).then((rows) => {
+    client.query<T>(queryName).get(params).then((rows) => {
       if (cancelled) return
       dataRef.current = rows
       setData(rows)
@@ -58,7 +58,7 @@ export function useWavelet<T = Record<string, unknown>>(
     })
 
     // Subscribe to updates
-    const unsub = client.view<T>(viewName).subscribe({
+    const unsub = client.query<T>(queryName).subscribe({
       onData: (diff: Diff<T>) => {
         if (cancelled) return
 
@@ -80,7 +80,7 @@ export function useWavelet<T = Record<string, unknown>>(
       cancelled = true
       unsub()
     }
-  }, [viewName, keyBy, JSON.stringify(params)])
+  }, [queryName, keyBy, JSON.stringify(params)])
 
   return { data, isLoading, error }
 }

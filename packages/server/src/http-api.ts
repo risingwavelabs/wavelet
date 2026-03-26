@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import pg from 'pg'
-import type { StreamDef, ViewDef, SqlFragment } from '@risingwave/wavelet'
+import type { EventDef, QueryDef, SqlFragment } from '@risingwave/wavelet'
 import type { JwtVerifier, JwtClaims } from './jwt.js'
 
 const { Pool } = pg
@@ -12,8 +12,8 @@ export class HttpApi {
 
   constructor(
     private connectionString: string,
-    private streams: Record<string, StreamDef>,
-    private views: Record<string, ViewDef | SqlFragment>,
+    private events: Record<string, EventDef>,
+    private queries: Record<string, QueryDef | SqlFragment>,
     private jwt?: JwtVerifier
   ) {}
 
@@ -32,24 +32,24 @@ export class HttpApi {
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`)
 
     try {
-      // POST /v1/streams/{name}
-      const streamMatch = url.pathname.match(/^\/v1\/streams\/([^/]+)$/)
-      if (streamMatch && req.method === 'POST') {
-        await this.handleWrite(streamMatch[1], req, res)
+      // POST /v1/events/{name}
+      const eventMatch = url.pathname.match(/^\/v1\/events\/([^/]+)$/)
+      if (eventMatch && req.method === 'POST') {
+        await this.handleWrite(eventMatch[1], req, res)
         return
       }
 
-      // POST /v1/streams/{name}/batch
-      const batchMatch = url.pathname.match(/^\/v1\/streams\/([^/]+)\/batch$/)
+      // POST /v1/events/{name}/batch
+      const batchMatch = url.pathname.match(/^\/v1\/events\/([^/]+)\/batch$/)
       if (batchMatch && req.method === 'POST') {
         await this.handleBatchWrite(batchMatch[1], req, res)
         return
       }
 
-      // GET /v1/views/{name}
-      const viewMatch = url.pathname.match(/^\/v1\/views\/([^/]+)$/)
-      if (viewMatch && req.method === 'GET') {
-        await this.handleRead(viewMatch[1], url, req, res)
+      // GET /v1/queries/{name}
+      const queryMatch = url.pathname.match(/^\/v1\/queries\/([^/]+)$/)
+      if (queryMatch && req.method === 'GET') {
+        await this.handleRead(queryMatch[1], url, req, res)
         return
       }
 
@@ -59,15 +59,15 @@ export class HttpApi {
         return
       }
 
-      // GET /v1/views - list available views
-      if (url.pathname === '/v1/views' && req.method === 'GET') {
-        this.json(res, 200, { views: Object.keys(this.views) })
+      // GET /v1/queries - list available queries
+      if (url.pathname === '/v1/queries' && req.method === 'GET') {
+        this.json(res, 200, { queries: Object.keys(this.queries) })
         return
       }
 
-      // GET /v1/streams - list available streams
-      if (url.pathname === '/v1/streams' && req.method === 'GET') {
-        this.json(res, 200, { streams: Object.keys(this.streams) })
+      // GET /v1/events - list available events
+      if (url.pathname === '/v1/events' && req.method === 'GET') {
+        this.json(res, 200, { events: Object.keys(this.events) })
         return
       }
 
@@ -76,11 +76,11 @@ export class HttpApi {
         message: `${req.method} ${url.pathname} does not match any route.`,
         routes: [
           'GET  /v1/health',
-          'GET  /v1/views',
-          'GET  /v1/views/{name}',
-          'GET  /v1/streams',
-          'POST /v1/streams/{name}',
-          'POST /v1/streams/{name}/batch',
+          'GET  /v1/queries',
+          'GET  /v1/queries/{name}',
+          'GET  /v1/events',
+          'POST /v1/events/{name}',
+          'POST /v1/events/{name}/batch',
         ],
       })
     } catch (err: any) {
@@ -96,13 +96,13 @@ export class HttpApi {
     return this.pool
   }
 
-  private async handleWrite(streamName: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const stream = this.streams[streamName]
-    if (!stream) {
-      const available = Object.keys(this.streams)
+  private async handleWrite(eventName: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const eventDef = this.events[eventName]
+    if (!eventDef) {
+      const available = Object.keys(this.events)
       this.json(res, 404, {
-        error: `Stream '${streamName}' not found.`,
-        available_streams: available,
+        error: `Event '${eventName}' not found.`,
+        available_events: available,
       })
       return
     }
@@ -111,51 +111,51 @@ export class HttpApi {
     const data = JSON.parse(body)
 
     const pool = this.ensurePool()
-    const columns = Object.keys(stream.columns)
+    const columns = Object.keys(eventDef.columns)
     const values = columns.map((col) => data[col])
     const placeholders = columns.map((_, i) => `$${i + 1}`)
 
     await pool.query(
-      `INSERT INTO ${streamName} (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`,
+      `INSERT INTO ${eventName} (${columns.join(', ')}) VALUES (${placeholders.join(', ')})`,
       values
     )
 
     this.json(res, 200, { ok: true })
   }
 
-  private async handleBatchWrite(streamName: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const stream = this.streams[streamName]
-    if (!stream) {
-      const available = Object.keys(this.streams)
+  private async handleBatchWrite(eventName: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const eventDef = this.events[eventName]
+    if (!eventDef) {
+      const available = Object.keys(this.events)
       this.json(res, 404, {
-        error: `Stream '${streamName}' not found.`,
-        available_streams: available,
+        error: `Event '${eventName}' not found.`,
+        available_events: available,
       })
       return
     }
 
     const body = await this.readBody(req)
-    const events: any[] = JSON.parse(body)
+    const items: any[] = JSON.parse(body)
 
-    if (!Array.isArray(events)) {
+    if (!Array.isArray(items)) {
       this.json(res, 400, { error: 'Batch endpoint expects a JSON array.' })
       return
     }
 
-    if (events.length === 0) {
+    if (items.length === 0) {
       this.json(res, 200, { ok: true, count: 0 })
       return
     }
 
     const pool = this.ensurePool()
-    const columns = Object.keys(stream.columns)
+    const columns = Object.keys(eventDef.columns)
 
     // Build a single INSERT with multiple VALUE rows
     const allValues: unknown[] = []
     const rowPlaceholders: string[] = []
 
-    for (let i = 0; i < events.length; i++) {
-      const row = events[i]
+    for (let i = 0; i < items.length; i++) {
+      const row = items[i]
       const offset = i * columns.length
       const ph = columns.map((_, j) => `$${offset + j + 1}`)
       rowPlaceholders.push(`(${ph.join(', ')})`)
@@ -165,26 +165,26 @@ export class HttpApi {
     }
 
     await pool.query(
-      `INSERT INTO ${streamName} (${columns.join(', ')}) VALUES ${rowPlaceholders.join(', ')}`,
+      `INSERT INTO ${eventName} (${columns.join(', ')}) VALUES ${rowPlaceholders.join(', ')}`,
       allValues
     )
 
-    this.json(res, 200, { ok: true, count: events.length })
+    this.json(res, 200, { ok: true, count: items.length })
   }
 
-  private async handleRead(viewName: string, url: URL, req: IncomingMessage, res: ServerResponse): Promise<void> {
-    if (!this.views[viewName]) {
-      const available = Object.keys(this.views)
+  private async handleRead(queryName: string, url: URL, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!this.queries[queryName]) {
+      const available = Object.keys(this.queries)
       this.json(res, 404, {
-        error: `View '${viewName}' not found.`,
-        available_views: available,
+        error: `Query '${queryName}' not found.`,
+        available_queries: available,
       })
       return
     }
 
-    // JWT verification for views with filterBy
-    const viewDef = this.views[viewName]
-    const filterBy = this.getFilterBy(viewDef)
+    // JWT verification for queries with filterBy
+    const queryDef = this.queries[queryName]
+    const filterBy = this.getFilterBy(queryDef)
 
     let claims: JwtClaims | null = null
     if (filterBy && this.jwt?.isConfigured()) {
@@ -192,7 +192,7 @@ export class HttpApi {
         ?? req.headers.authorization?.replace('Bearer ', '')
 
       if (!token) {
-        this.json(res, 401, { error: 'Authentication required for filtered views.' })
+        this.json(res, 401, { error: 'Authentication required for filtered queries.' })
         return
       }
 
@@ -209,7 +209,7 @@ export class HttpApi {
       const claimValue = claims[filterBy]
       if (claimValue === undefined) {
         // No matching claim -- return empty result, not all data
-        this.json(res, 200, { view: viewName, rows: [] })
+        this.json(res, 200, { query: queryName, rows: [] })
         return
       }
       values.push(String(claimValue))
@@ -217,7 +217,7 @@ export class HttpApi {
     }
 
     // Add query params as additional filters, validating column names
-    const knownColumns = this.getViewColumns(viewDef)
+    const knownColumns = this.getQueryColumns(queryDef)
     for (const [key, value] of url.searchParams.entries()) {
       if (key === 'token') continue // skip JWT token param
       if (knownColumns && !knownColumns.includes(key)) {
@@ -232,24 +232,24 @@ export class HttpApi {
       params.push(`${key} = $${values.length}`)
     }
 
-    let sql = `SELECT * FROM ${viewName}`
+    let sql = `SELECT * FROM ${queryName}`
     if (params.length > 0) {
       sql += ` WHERE ${params.join(' AND ')}`
     }
 
     const result = await pool.query(sql, values)
-    this.json(res, 200, { view: viewName, rows: result.rows })
+    this.json(res, 200, { query: queryName, rows: result.rows })
   }
 
-  private getFilterBy(viewDef: ViewDef | SqlFragment): string | undefined {
-    if ('_tag' in viewDef && viewDef._tag === 'sql') return undefined
-    return (viewDef as ViewDef).filterBy
+  private getFilterBy(queryDef: QueryDef | SqlFragment): string | undefined {
+    if ('_tag' in queryDef && queryDef._tag === 'sql') return undefined
+    return (queryDef as QueryDef).filterBy
   }
 
-  private getViewColumns(viewDef: ViewDef | SqlFragment): string[] | null {
-    if ('_tag' in viewDef && viewDef._tag === 'sql') return null
-    const vd = viewDef as ViewDef
-    if (vd.columns) return Object.keys(vd.columns)
+  private getQueryColumns(queryDef: QueryDef | SqlFragment): string[] | null {
+    if ('_tag' in queryDef && queryDef._tag === 'sql') return null
+    const qd = queryDef as QueryDef
+    if (qd.columns) return Object.keys(qd.columns)
     return null
   }
 

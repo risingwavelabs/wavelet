@@ -1,6 +1,6 @@
 ---
 name: wavelet
-description: Set up and configure Wavelet projects. Use when the user wants to add streams, views, or subscriptions to a wavelet.config.ts, integrate the Wavelet SDK or React hooks, or set up MCP for agent integration.
+description: Set up and configure Wavelet projects. Use when the user wants to add events, queries, or subscriptions to a wavelet.config.ts, integrate the Wavelet SDK or React hooks, or set up MCP for agent integration.
 ---
 
 # Wavelet
@@ -9,9 +9,9 @@ Wavelet is a reactive backend that pushes pre-computed SQL query results to apps
 
 ## Core Concepts
 
-- **Streams** -- event ingestion tables. Defined with typed columns.
-- **Views** -- SQL materialized views that incrementally recompute when source data changes.
-- **Subscriptions** -- WebSocket connections that receive diffs when a view changes.
+- **Events** -- event ingestion tables. Defined with typed columns.
+- **Queries** -- SQL materialized views that incrementally recompute when source data changes.
+- **Subscriptions** -- WebSocket connections that receive diffs when a query changes.
 - **filterBy** -- JWT-based per-tenant row filtering, enforced server-side.
 
 ## Config File: wavelet.config.ts
@@ -24,9 +24,9 @@ import { defineConfig, sql } from '@risingwave/wavelet'
 export default defineConfig({
   database: 'postgres://root@localhost:4566/dev',
 
-  streams: {
+  events: {
     // Event ingestion. Column types: 'string' | 'int' | 'float' | 'boolean' | 'timestamp' | 'json'
-    events: {
+    game_events: {
       columns: {
         user_id: 'string',
         action: 'string',
@@ -46,23 +46,23 @@ export default defineConfig({
     }
   },
 
-  views: {
-    // Simple view -- just SQL
+  queries: {
+    // Simple query -- just SQL
     totals: sql`
       SELECT user_id, SUM(value) AS total
-      FROM events GROUP BY user_id
+      FROM game_events GROUP BY user_id
     `,
 
-    // View with per-tenant filtering
+    // Query with per-tenant filtering
     tenant_metrics: {
       query: sql`
         SELECT tenant_id, COUNT(*) AS count
-        FROM events GROUP BY tenant_id
+        FROM game_events GROUP BY tenant_id
       `,
       filterBy: 'tenant_id',
     },
 
-    // View with explicit column types (enables offline codegen without RisingWave)
+    // Query with explicit column types (enables offline codegen without RisingWave)
     stats: {
       query: sql`SELECT ...`,
       columns: { user_id: 'string', total: 'int' },
@@ -104,8 +104,8 @@ After running `npx wavelet generate`, a typed client is available at `.wavelet/c
 import { useWavelet } from './.wavelet/client'
 
 function Component() {
-  const { data, isLoading, error } = useWavelet('view_name')
-  // data is fully typed based on the view's columns
+  const { data, isLoading, error } = useWavelet('query_name')
+  // data is fully typed based on the query's columns
 }
 ```
 
@@ -119,32 +119,32 @@ const wavelet = new TypedWaveletClient({
   token: 'jwt-token',  // or: () => getToken()
 })
 
-// Read view
-const rows = await wavelet.views.view_name.get()
+// Read query
+const rows = await wavelet.queries.query_name.get()
 
 // Subscribe to live updates
-const unsub = wavelet.views.view_name.subscribe({
+const unsub = wavelet.queries.query_name.subscribe({
   onData: (diff) => {
     // diff.inserted, diff.updated, diff.deleted
   },
 })
 
 // Write events
-await wavelet.streams.stream_name.emit({ key: 'value' })
-await wavelet.streams.stream_name.emitBatch([{ key: 'v1' }, { key: 'v2' }])
+await wavelet.events.event_name.emit({ key: 'value' })
+await wavelet.events.event_name.emitBatch([{ key: 'v1' }, { key: 'v2' }])
 ```
 
 ## HTTP API
 
 ```
-GET  /v1/health                  -> { status: "ok" }
-GET  /v1/views                   -> { views: [...] }
-GET  /v1/views/{name}            -> { view: "name", rows: [...] }
-GET  /v1/views/{name}?key=value  -> filtered rows
-GET  /v1/streams                 -> { streams: [...] }
-POST /v1/streams/{name}          -> { ok: true }
-POST /v1/streams/{name}/batch    -> { ok: true, count: N }
-WS   /subscribe/{name}           -> real-time diffs
+GET  /v1/health                    -> { status: "ok" }
+GET  /v1/queries                   -> { queries: [...] }
+GET  /v1/queries/{name}            -> { query: "name", rows: [...] }
+GET  /v1/queries/{name}?key=value  -> filtered rows
+GET  /v1/events                    -> { events: [...] }
+POST /v1/events/{name}             -> { ok: true }
+POST /v1/events/{name}/batch       -> { ok: true, count: N }
+WS   /subscribe/{name}             -> real-time diffs
 ```
 
 ## MCP Setup (for AI agents)
@@ -165,11 +165,11 @@ Add to your MCP config (Codex Desktop, Cursor, etc.):
 }
 ```
 
-Available tools: `list_views`, `query_view`, `list_streams`, `emit_event`, `emit_batch`, `run_sql`.
+Available tools: `list_queries`, `query`, `list_events`, `emit_event`, `emit_batch`, `run_sql`.
 
-## SQL Patterns for Views
+## SQL Patterns for Queries
 
-Views are standard SQL running on RisingWave. Key patterns:
+Queries are standard SQL running on RisingWave. Key patterns:
 
 ```sql
 -- Aggregation
@@ -184,7 +184,7 @@ GROUP BY user_id
 SELECT user_id, COUNT(*) AS tx_count
 FROM transactions GROUP BY user_id HAVING COUNT(*) > 100
 
--- Join streams with reference tables
+-- Join events with reference tables
 SELECT o.*, u.name, p.category
 FROM orders o JOIN users u ON o.user_id = u.id JOIN products p ON o.product_id = p.id
 
@@ -196,20 +196,20 @@ FROM trades
 
 ## Common Tasks
 
-### Add a new stream + view
+### Add a new event + query
 
-1. Add stream columns to `wavelet.config.ts` under `streams`
-2. Add a SQL view under `views` that queries the stream
+1. Add event columns to `wavelet.config.ts` under `events`
+2. Add a SQL query under `queries` that references the event table
 3. Run `npx wavelet dev` (or `npx wavelet push` if server is already running)
 4. Run `npx wavelet generate` to update the typed client
 
 ### Add per-tenant filtering
 
-Use the object form for the view with `filterBy`:
+Use the object form for the query with `filterBy`:
 
 ```typescript
-views: {
-  my_view: {
+queries: {
+  my_query: {
     query: sql`SELECT tenant_id, ... FROM ... GROUP BY tenant_id`,
     filterBy: 'tenant_id',
   }
@@ -232,4 +232,4 @@ sources: {
 }
 ```
 
-Tables become available in views as `prod_db_users`, `prod_db_orders`.
+Tables become available in queries as `prod_db_users`, `prod_db_orders`.

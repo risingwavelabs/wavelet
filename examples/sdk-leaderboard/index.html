@@ -322,9 +322,9 @@
           <div class="code">import { WaveletClient } from '../../packages/sdk/browser/index.browser.js'
 
 const client = new WaveletClient({ url: 'http://localhost:8080' })
-await client.view('leaderboard').get()
-client.view('leaderboard').subscribe({ onData })
-await client.stream('game_events').emit({...})</div>
+await client.query('leaderboard').get()
+client.query('leaderboard').subscribe({ onData })
+await client.event('game_events').emit({...})</div>
         </section>
 
         <section class="card">
@@ -343,8 +343,8 @@ await client.stream('game_events').emit({...})</div>
     import { WaveletClient } from '../../packages/sdk/browser/index.browser.js'
 
     const client = new WaveletClient({ url: 'http://localhost:8080' })
-    const leaderboardView = client.view('leaderboard')
-    const gameEvents = client.stream('game_events')
+    const leaderboardQuery = client.query('leaderboard')
+    const gameEvents = client.event('game_events')
     const players = ['alice', 'bob', 'charlie', 'dave', 'eve', 'frank', 'grace', 'heidi']
 
     let leaderboard = []
@@ -448,7 +448,7 @@ await client.stream('game_events').emit({...})</div>
 
     async function loadInitialState() {
       try {
-        leaderboard = await leaderboardView.get()
+        leaderboard = await leaderboardQuery.get()
         render()
         log('Fetched initial leaderboard', `${leaderboard.length} row(s)`)
       } catch (error) {
@@ -456,7 +456,7 @@ await client.stream('game_events').emit({...})</div>
       }
     }
 
-    leaderboardView.subscribe({
+    leaderboardQuery.subscribe({
       onOpen() {
         setStatus(true, 'Live')
         log('WebSocket connected')

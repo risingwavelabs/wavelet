@@ -84,7 +84,7 @@
     }
 
     // Fetch initial data
-    fetch(`${API}/v1/views/leaderboard`)
+    fetch(`${API}/v1/queries/leaderboard`)
       .then(r => r.json())
       .then(d => { leaderboard = d.rows || []; render() })
       .catch(e => log(`Fetch error: ${e.message}`))
@@ -137,7 +137,7 @@
       const player = players[Math.floor(Math.random() * players.length)]
       const score = Math.floor(Math.random() * 100) + 1
 
-      const res = await fetch(`${API}/v1/streams/game_events`, {
+      const res = await fetch(`${API}/v1/events/game_events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ player_id: player, score, event_type: 'game' })
@@ -154,7 +154,7 @@
         event_type: 'game'
       }))
 
-      const res = await fetch(`${API}/v1/streams/game_events/batch`, {
+      const res = await fetch(`${API}/v1/events/game_events/batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(events)

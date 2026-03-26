@@ -25,7 +25,7 @@ If RisingWave is not running, `wavelet dev` will attempt to start it automatical
 
 ## `wavelet push`
 
-Sync stream and view definitions to RisingWave without starting a server.
+Sync event and query definitions to RisingWave without starting a server.
 
 ```bash
 npx wavelet push
@@ -34,22 +34,22 @@ npx wavelet push --json     # structured output
 
 The push command diffs your config against the current RisingWave state:
 - Creates missing tables, materialized views, and subscriptions
-- Drops removed views and their subscriptions
-- Recreates views whose SQL has changed (drop + create)
-- Drops orphaned tables only if no view depends on them
+- Drops removed queries and their subscriptions
+- Recreates queries whose SQL has changed (drop + create)
+- Drops orphaned tables only if no materialized view depends on them
 
 ## `wavelet generate`
 
-Generate a typed TypeScript client from your view and stream schemas.
+Generate a typed TypeScript client from your query and event schemas.
 
 ```bash
 npx wavelet generate
 ```
 
 Creates `.wavelet/client.ts` with:
-- TypeScript interfaces for each view's row type
-- TypeScript interfaces for each stream's event type
-- Typed client class with view and stream accessors
+- TypeScript interfaces for each query's row type
+- TypeScript interfaces for each event's type
+- Typed client class with query and event accessors
 - React hook overloads with correct return types
 
 Requires a running RisingWave instance (to introspect schemas).
@@ -62,7 +62,7 @@ Show current configuration summary.
 npx wavelet status
 ```
 
-Displays: config file path, database URL (masked), stream count, view count, and view names.
+Displays: config file path, database URL (masked), event count, query count, and query names.
 
 ## Common options
 

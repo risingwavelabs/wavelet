@@ -10,8 +10,8 @@ Usage:
 
 Commands:
   dev        Start local development server
-  generate   Generate typed client from view definitions
-  push       Sync view definitions to Wavelet server
+  generate   Generate typed client from query definitions
+  push       Sync query definitions to Wavelet server
   status     Show current configuration and connection status
   init       Initialize a new Wavelet project
 
@@ -69,9 +69,9 @@ async function runInit() {
 export default defineConfig({
   database: process.env.WAVELET_DATABASE_URL ?? 'postgres://root@localhost:4566/dev',
 
-  streams: {
-    // Define your event streams here
-    // events: {
+  events: {
+    // Define your events here
+    // game_events: {
     //   columns: {
     //     user_id: 'string',
     //     action: 'string',
@@ -80,11 +80,11 @@ export default defineConfig({
     // }
   },
 
-  views: {
-    // Define your materialized views here
+  queries: {
+    // Define your queries (materialized views) here
     // leaderboard: sql\`
     //   SELECT user_id, SUM(value) as total
-    //   FROM events
+    //   FROM game_events
     //   GROUP BY user_id
     //   ORDER BY total DESC
     //   LIMIT 100
@@ -96,7 +96,7 @@ export default defineConfig({
   console.log('Created wavelet.config.ts')
   console.log('')
   console.log('Next steps:')
-  console.log('  1. Edit wavelet.config.ts to define your streams and views')
+  console.log('  1. Edit wavelet.config.ts to define your events and queries')
   console.log('  2. Run: wavelet dev')
 }
 
@@ -116,7 +116,7 @@ async function runDev() {
   const ddl = new DdlManager(config.database)
   await ddl.connect()
 
-  console.log('\nSyncing streams and views...')
+  console.log('\nSyncing events and queries...')
   const actions = await ddl.sync(config)
   printDdlActions(actions)
   await ddl.close()
@@ -178,17 +178,17 @@ async function runStatus() {
 
   try {
     const config = await loadConfig(configPath)
-    const streamCount = Object.keys(config.streams ?? {}).length
-    const viewCount = Object.keys(config.views ?? {}).length
+    const eventCount = Object.keys(config.events ?? config.streams ?? {}).length
+    const queryCount = Object.keys(config.queries ?? config.views ?? {}).length
 
     console.log(`Config:   ${configPath}`)
     console.log(`Database: ${config.database.replace(/\/\/[^@]+@/, '//***@')}`)
-    console.log(`Streams:  ${streamCount}`)
-    console.log(`Views:    ${viewCount}`)
+    console.log(`Events:   ${eventCount}`)
+    console.log(`Queries:  ${queryCount}`)
 
-    if (viewCount > 0) {
-      console.log('\nViews:')
-      for (const name of Object.keys(config.views ?? {})) {
+    if (queryCount > 0) {
+      console.log('\nQueries:')
+      for (const name of Object.keys(config.queries ?? config.views ?? {})) {
         console.log(`  - ${name}`)
       }
     }
