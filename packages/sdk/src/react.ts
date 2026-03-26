@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { WaveletClient } from './client.js'
 import type { Diff, WaveletClientOptions } from './types.js'
 import { WaveletError } from './types.js'
@@ -83,6 +83,98 @@ export function useWavelet<T = Record<string, unknown>>(
   }, [queryName, keyBy, JSON.stringify(params)])
 
   return { data, isLoading, error }
+}
+
+export type ChangeType = 'inserted' | 'updated' | 'deleted'
+
+export interface UseWaveletDiffOptions {
+  keyBy: string
+  params?: Record<string, string>
+  /** How long change markers persist in ms (default 500) */
+  changeDuration?: number
+}
+
+export interface UseWaveletDiffResult<T> {
+  data: T[]
+  changes: Map<unknown, ChangeType>
+  isLoading: boolean
+  error: WaveletError | null
+}
+
+/**
+ * Like useWavelet, but tracks which rows changed in the last diff cycle.
+ * `changes` is a Map from keyBy value to change type, cleared after `changeDuration` ms.
+ * `keyBy` is required.
+ */
+export function useWaveletDiff<T = Record<string, unknown>>(
+  queryName: string,
+  options: UseWaveletDiffOptions
+): UseWaveletDiffResult<T> {
+  const { keyBy, params, changeDuration = 500 } = options
+
+  const [data, setData] = useState<T[]>([])
+  const [changes, setChanges] = useState<Map<unknown, ChangeType>>(new Map())
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<WaveletError | null>(null)
+  const dataRef = useRef<T[]>([])
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const applyDiff = useCallback((diff: Diff<T>) => {
+    const newChanges = new Map<unknown, ChangeType>()
+
+    dataRef.current = mergeByKey(dataRef.current, diff, keyBy)
+
+    for (const row of diff.inserted) {
+      newChanges.set((row as any)[keyBy], 'inserted')
+    }
+    for (const row of diff.updated) {
+      newChanges.set((row as any)[keyBy], 'updated')
+    }
+    for (const row of diff.deleted) {
+      newChanges.set((row as any)[keyBy], 'deleted')
+    }
+
+    setData([...dataRef.current])
+    setChanges(newChanges)
+
+    if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+    clearTimerRef.current = setTimeout(() => setChanges(new Map()), changeDuration)
+  }, [keyBy, changeDuration])
+
+  useEffect(() => {
+    const client = getClient()
+    let cancelled = false
+
+    client.query<T>(queryName).get(params).then((rows) => {
+      if (cancelled) return
+      dataRef.current = rows
+      setData(rows)
+      setIsLoading(false)
+    }).catch((err) => {
+      if (cancelled) return
+      setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'))
+      setIsLoading(false)
+    })
+
+    const unsub = client.query<T>(queryName).subscribe({
+      onData: (diff: Diff<T>) => {
+        if (cancelled) return
+        applyDiff(diff)
+      },
+      onError: (err) => {
+        if (cancelled) return
+        setError(err)
+      },
+    })
+
+    return () => {
+      cancelled = true
+      unsub()
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+    }
+  }, [queryName, keyBy, JSON.stringify(params), applyDiff])
+
+  return { data, changes, isLoading, error }
 }
 
 /**
