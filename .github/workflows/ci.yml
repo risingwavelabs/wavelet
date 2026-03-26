@@ -28,14 +28,12 @@ jobs:
 
       - name: Build packages
         run: |
-          cd packages/config && npx tsc && cd ../..
-          ls packages/config/dist/types.d.ts
-          cat packages/config/dist/index.d.ts | head -5
-          ls -la node_modules/@risingwave/wavelet/dist/types.d.ts
-          cd packages/server && npx tsc && cd ../..
-          cd packages/sdk && npm run build && cd ../..
-          cd packages/cli && npx tsc && cd ../..
-          cd packages/mcp && npx tsc && cd ../..
+          npx tsc -p packages/config/tsconfig.json
+          npx tsc -p packages/server/tsconfig.json
+          npx tsc -p packages/sdk/tsconfig.json
+          npx tsc -p packages/sdk/tsconfig.browser.json
+          npx tsc -p packages/cli/tsconfig.json
+          npx tsc -p packages/mcp/tsconfig.json
 
       - name: Run tests
         run: npx vitest run
