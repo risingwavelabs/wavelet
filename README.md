@@ -28,6 +28,14 @@ const { data } = useWavelet('revenue')
 
 Built on [RisingWave](https://github.com/risingwavelabs/risingwave). By the RisingWave team.
 
+## Agent Onboarding
+
+```bash
+npx skills add risingwavelabs/skills --skill wavelet
+```
+
+Or read [SKILL.md](https://github.com/risingwavelabs/skills/blob/main/skills/wavelet/SKILL.md) directly.
+
 ## Use Cases
 
 ### Real-time SaaS Dashboards
@@ -154,14 +162,6 @@ AI agents query and write events as tool calls.
 | `emit_event` | Write an event |
 | `emit_batch` | Write a batch of events |
 | `run_sql` | Execute a read-only SQL query |
-
-## Agent Onboarding
-
-```bash
-npx skills add risingwavelabs/skills --skill wavelet
-```
-
-Or read [SKILL.md](https://github.com/risingwavelabs/skills/blob/main/skills/wavelet/SKILL.md) directly.
 
 ## Architecture
 
