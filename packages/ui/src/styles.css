@@ -1,0 +1,122 @@
+/* @risingwave/wavelet-ui default styles */
+
+/* ── Table ── */
+.wv-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.wv-table-th {
+  padding: 8px 12px;
+  font-weight: 600;
+  border-bottom: 2px solid #e2e8f0;
+}
+.wv-table-td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.wv-table-row {
+  transition: background-color 0.3s ease;
+}
+.wv-table-row[data-wv-change="inserted"] {
+  animation: wv-flash-insert 500ms ease-out;
+}
+.wv-table-row[data-wv-change="updated"] {
+  animation: wv-flash-update 500ms ease-out;
+}
+.wv-table-row[data-wv-change="deleted"] {
+  animation: wv-flash-delete 500ms ease-out;
+  opacity: 0.4;
+}
+
+@keyframes wv-flash-insert {
+  from { background-color: rgba(72, 187, 120, 0.3); }
+  to { background-color: transparent; }
+}
+@keyframes wv-flash-update {
+  from { background-color: rgba(236, 201, 75, 0.3); }
+  to { background-color: transparent; }
+}
+@keyframes wv-flash-delete {
+  from { background-color: rgba(245, 101, 101, 0.3); }
+  to { background-color: transparent; }
+}
+
+/* ── Counter ── */
+.wv-counter {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.wv-counter-label {
+  font-size: 0.875rem;
+  color: #718096;
+}
+.wv-counter-value {
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.wv-counter-trend {
+  margin-left: 4px;
+  font-size: 1rem;
+}
+.wv-counter-trend-up {
+  color: #48bb78;
+}
+.wv-counter-trend-down {
+  color: #f56565;
+}
+
+/* ── Feed ── */
+.wv-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wv-feed-item {
+  transition: opacity 0.3s ease;
+}
+.wv-feed-item[data-wv-change="inserted"] {
+  animation: wv-slide-in 300ms ease-out;
+}
+
+@keyframes wv-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Status ── */
+.wv-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+}
+.wv-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #a0aec0;
+}
+.wv-status[data-wv-status="connected"] .wv-status-dot {
+  background-color: #48bb78;
+}
+.wv-status[data-wv-status="loading"] .wv-status-dot {
+  background-color: #ecc94b;
+  animation: wv-pulse 1s infinite;
+}
+.wv-status[data-wv-status="error"] .wv-status-dot {
+  background-color: #f56565;
+}
+
+@keyframes wv-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
