@@ -25,12 +25,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Clean nested node_modules
+        run: |
+          rm -rf packages/*/node_modules/@risingwave
+
       - name: Build packages
         run: |
           npx tsc -p packages/config/tsconfig.json
-          node -e "const t = require('./packages/config/dist/types'); console.log('EventDef:', !!t.EventDef, 'QueryDef:', !!t.QueryDef)"
-          ls packages/server/node_modules/@risingwave 2>/dev/null && echo "server has own node_modules" || echo "server uses root node_modules"
-          node -e "const p = require.resolve('@risingwave/wavelet', {paths:['./packages/server']}); console.log('resolved:', p)"
           npx tsc -p packages/server/tsconfig.json
           npx tsc -p packages/sdk/tsconfig.json
           npx tsc -p packages/sdk/tsconfig.browser.json
