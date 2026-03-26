@@ -26,13 +26,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build packages
+      - name: Build packages (in dependency order)
         run: |
-          npm run build --workspace=packages/config
-          npm run build --workspace=packages/server
-          npm run build --workspace=packages/sdk
-          npm run build --workspace=packages/cli
-          npm run build --workspace=packages/mcp
+          cd packages/config && npx tsc && cd ../..
+          cd packages/server && npx tsc && cd ../..
+          cd packages/sdk && npm run build && cd ../..
+          cd packages/cli && npx tsc && cd ../..
+          cd packages/mcp && npx tsc && cd ../..
 
       - name: Run tests
         run: npx vitest run
