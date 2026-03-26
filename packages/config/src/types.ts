@@ -21,6 +21,7 @@ export interface QueryDef {
   query: SqlFragment
   filterBy?: string
   columns?: Record<string, ColumnType>
+  webhook?: string
 }
 
 /** @deprecated Use QueryDef instead */

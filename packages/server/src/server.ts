@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse, type Server } 
 import type { WaveletConfig } from '@risingwave/wavelet'
 import { CursorManager } from './cursor-manager.js'
 import { WebSocketFanout } from './ws-fanout.js'
+import { WebhookFanout } from './webhook.js'
 import { HttpApi } from './http-api.js'
 import { JwtVerifier } from './jwt.js'
 
@@ -9,6 +10,7 @@ export class WaveletServer {
   private httpServer: ReturnType<typeof createServer> | null = null
   private cursorManager: CursorManager
   private fanout: WebSocketFanout
+  private webhooks: WebhookFanout
   private httpApi: HttpApi
   private jwt: JwtVerifier
 
@@ -18,6 +20,7 @@ export class WaveletServer {
     const events = config.events ?? config.streams ?? {}
     this.cursorManager = new CursorManager(config.database, queries)
     this.fanout = new WebSocketFanout(this.cursorManager, this.jwt, queries)
+    this.webhooks = new WebhookFanout(queries, config.jwt?.secret)
     this.httpApi = new HttpApi(config.database, events, queries, this.jwt)
   }
 
@@ -31,6 +34,7 @@ export class WaveletServer {
     await this.cursorManager.initialize()
     this.cursorManager.startPolling((queryName, diffs) => {
       this.fanout.broadcast(queryName, diffs)
+      this.webhooks.broadcast(queryName, diffs)
     })
 
     await new Promise<void>((resolve) => {
@@ -57,6 +61,7 @@ export class WaveletServer {
     await this.cursorManager.initialize()
     this.cursorManager.startPolling((queryName, diffs) => {
       this.fanout.broadcast(queryName, diffs)
+      this.webhooks.broadcast(queryName, diffs)
     })
 
     const handleHttp = (req: IncomingMessage, res: ServerResponse) => {
