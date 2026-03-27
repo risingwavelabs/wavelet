@@ -1,9 +1,9 @@
 # Wavelet
 
+[![Slack](https://badgen.net/badge/Slack/Join%20RisingWave/0abd59?icon=slack)](https://go.risingwave.com/slack)
 [![CI](https://github.com/risingwavelabs/wavelet/actions/workflows/ci.yml/badge.svg)](https://github.com/risingwavelabs/wavelet/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@risingwave/wavelet)](https://www.npmjs.com/package/@risingwave/wavelet)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
-[![Slack](https://badgen.net/badge/Slack/Join%20RisingWave/0abd59?icon=slack)](https://go.risingwave.com/slack)
 [![SKILL.md](https://img.shields.io/badge/SKILL.md-agent%20onboarding-black)](skills/wavelet/SKILL.md)
 
 **The reactive backend for agents and apps.**
