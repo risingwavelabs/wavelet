@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { WaveletClient } from './client.js';
 import { WaveletError } from './types.js';
 let globalClient = null;
@@ -59,6 +59,73 @@ export function useWavelet(queryName, options) {
         };
     }, [queryName, keyBy, JSON.stringify(params)]);
     return { data, isLoading, error };
+}
+/**
+ * Like useWavelet, but tracks which rows changed in the last diff cycle.
+ * `changes` is a Map from keyBy value to change type, cleared after `changeDuration` ms.
+ * `keyBy` is required.
+ */
+export function useWaveletDiff(queryName, options) {
+    const { keyBy, params, changeDuration = 500 } = options;
+    const [data, setData] = useState([]);
+    const [changes, setChanges] = useState(new Map());
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const dataRef = useRef([]);
+    const clearTimerRef = useRef(undefined);
+    const applyDiff = useCallback((diff) => {
+        const newChanges = new Map();
+        dataRef.current = mergeByKey(dataRef.current, diff, keyBy);
+        for (const row of diff.inserted) {
+            newChanges.set(row[keyBy], 'inserted');
+        }
+        for (const row of diff.updated) {
+            newChanges.set(row[keyBy], 'updated');
+        }
+        for (const row of diff.deleted) {
+            newChanges.set(row[keyBy], 'deleted');
+        }
+        setData([...dataRef.current]);
+        setChanges(newChanges);
+        if (clearTimerRef.current)
+            clearTimeout(clearTimerRef.current);
+        clearTimerRef.current = setTimeout(() => setChanges(new Map()), changeDuration);
+    }, [keyBy, changeDuration]);
+    useEffect(() => {
+        const client = getClient();
+        let cancelled = false;
+        client.query(queryName).get(params).then((rows) => {
+            if (cancelled)
+                return;
+            dataRef.current = rows;
+            setData(rows);
+            setIsLoading(false);
+        }).catch((err) => {
+            if (cancelled)
+                return;
+            setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'));
+            setIsLoading(false);
+        });
+        const unsub = client.query(queryName).subscribe({
+            onData: (diff) => {
+                if (cancelled)
+                    return;
+                applyDiff(diff);
+            },
+            onError: (err) => {
+                if (cancelled)
+                    return;
+                setError(err);
+            },
+        });
+        return () => {
+            cancelled = true;
+            unsub();
+            if (clearTimerRef.current)
+                clearTimeout(clearTimerRef.current);
+        };
+    }, [queryName, keyBy, JSON.stringify(params), applyDiff]);
+    return { data, changes, isLoading, error };
 }
 /**
  * Key-based merge: uses a specified field as primary key.
