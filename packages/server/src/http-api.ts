@@ -6,6 +6,7 @@ import type { JwtVerifier, JwtClaims } from './jwt.js'
 const { Pool } = pg
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_INSERT_PARAMETERS = 65535
 
 export class HttpApi {
   private pool: InstanceType<typeof Pool> | null = null
@@ -149,25 +150,17 @@ export class HttpApi {
 
     const pool = this.ensurePool()
     const columns = Object.keys(eventDef.columns)
+    const maxRowsPerInsert = Math.max(1, Math.floor(MAX_INSERT_PARAMETERS / Math.max(columns.length, 1)))
 
-    // Build a single INSERT with multiple VALUE rows
-    const allValues: unknown[] = []
-    const rowPlaceholders: string[] = []
+    for (let start = 0; start < items.length; start += maxRowsPerInsert) {
+      const chunk = items.slice(start, start + maxRowsPerInsert)
+      const { values, rows } = this.buildBatchInsert(chunk, columns)
 
-    for (let i = 0; i < items.length; i++) {
-      const row = items[i]
-      const offset = i * columns.length
-      const ph = columns.map((_, j) => `$${offset + j + 1}`)
-      rowPlaceholders.push(`(${ph.join(', ')})`)
-      for (const col of columns) {
-        allValues.push(row[col])
-      }
+      await pool.query(
+        `INSERT INTO ${eventName} (${columns.join(', ')}) VALUES ${rows.join(', ')}`,
+        values
+      )
     }
-
-    await pool.query(
-      `INSERT INTO ${eventName} (${columns.join(', ')}) VALUES ${rowPlaceholders.join(', ')}`,
-      allValues
-    )
 
     this.json(res, 200, { ok: true, count: items.length })
   }
@@ -256,6 +249,22 @@ export class HttpApi {
   private json(res: ServerResponse, status: number, data: unknown): void {
     res.writeHead(status, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(data))
+  }
+
+  private buildBatchInsert(items: Record<string, unknown>[], columns: string[]): {
+    values: unknown[]
+    rows: string[]
+  } {
+    const values: unknown[] = []
+    const rows = items.map((item, rowIndex) => {
+      const placeholders = columns.map((column, columnIndex) => {
+        values.push(item[column])
+        return `$${rowIndex * columns.length + columnIndex + 1}`
+      })
+      return `(${placeholders.join(', ')})`
+    })
+
+    return { values, rows }
   }
 
   private readBody(req: IncomingMessage): Promise<string> {

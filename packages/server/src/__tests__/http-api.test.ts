@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import http from 'node:http'
 import { HttpApi } from '../http-api.js'
 
@@ -123,6 +123,46 @@ describe('HttpApi', () => {
       const res = await request(server, 'GET', '/v1/queries/nonexistent')
       expect(res.status).toBe(404)
       expect(res.data.available_queries).toEqual(['leaderboard'])
+    } finally {
+      server.close()
+    }
+  })
+
+  it('batch writes use a single multi-row insert for small batches', async () => {
+    const api = new HttpApi('postgres://dummy', events, queries)
+    const query = vi.fn().mockResolvedValue({ rows: [] })
+    ;(api as any).pool = { query }
+    const server = await createTestServer(api)
+
+    try {
+      const res = await request(server, 'POST', '/v1/events/game_events/batch', [
+        { user_id: 'alice', value: 10 },
+        { user_id: 'bob', value: 20 },
+      ])
+
+      expect(res.status).toBe(200)
+      expect(res.data).toEqual({ ok: true, count: 2 })
+      expect(query).toHaveBeenCalledTimes(1)
+      expect(query).toHaveBeenCalledWith(
+        'INSERT INTO game_events (user_id, value) VALUES ($1, $2), ($3, $4)',
+        ['alice', 10, 'bob', 20]
+      )
+    } finally {
+      server.close()
+    }
+  })
+
+  it('empty batch returns without querying the database', async () => {
+    const api = new HttpApi('postgres://dummy', events, queries)
+    const query = vi.fn()
+    ;(api as any).pool = { query }
+    const server = await createTestServer(api)
+
+    try {
+      const res = await request(server, 'POST', '/v1/events/game_events/batch', [])
+      expect(res.status).toBe(200)
+      expect(res.data).toEqual({ ok: true, count: 0 })
+      expect(query).not.toHaveBeenCalled()
     } finally {
       server.close()
     }
