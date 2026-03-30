@@ -2,6 +2,15 @@
   "name": "@risingwave/wavelet-cli",
   "version": "0.2.2",
   "description": "Wavelet CLI - manage views, generate types, run dev server",
+  "homepage": "https://github.com/risingwavelabs/wavelet",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/risingwavelabs/wavelet.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/risingwavelabs/wavelet/issues"
+  },
   "bin": {
     "wavelet": "dist/index.js"
   },
