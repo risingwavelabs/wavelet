@@ -1,6 +1,6 @@
 {
   "name": "@risingwave/wavelet-cli",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Wavelet CLI - manage views, generate types, run dev server",
   "homepage": "https://github.com/risingwavelabs/wavelet",
   "repository": {
@@ -23,8 +23,8 @@
     "prepack": "npm --prefix ../config run build && npm --prefix ../server run build && npm run build"
   },
   "dependencies": {
-    "@risingwave/wavelet": "0.2.3",
-    "@risingwave/wavelet-server": "0.2.3",
+    "@risingwave/wavelet": "0.2.4",
+    "@risingwave/wavelet-server": "0.2.4",
     "pg": "^8.13.0",
     "tsx": "^4.0.0"
   },
