@@ -38,31 +38,52 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Bump version
+      - name: Prepare release versions
         run: |
-          npm version ${{ inputs.version_bump }} --workspaces --no-git-tag-version
-          VERSION=$(node -p 'require("./packages/config/package.json").version')
-          npm version "$VERSION" --no-git-tag-version
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-      - name: Update cross-references
-        run: |
-          # Update workspace dependency versions to match
-          for pkg in packages/*/package.json; do
-            node -e "
-              const fs = require('fs');
-              const pkg = JSON.parse(fs.readFileSync('$pkg', 'utf8'));
+          CURRENT_VERSION=$(node -p 'require("./packages/config/package.json").version')
+          VERSION=$(node -e "
+            const [major, minor, patch] = process.argv[1].split('.').map(Number);
+            const bump = process.argv[2];
+            if (bump === 'major') {
+              console.log(\`\${major + 1}.0.0\`);
+            } else if (bump === 'minor') {
+              console.log(\`\${major}.\${minor + 1}.0\`);
+            } else if (bump === 'patch') {
+              console.log(\`\${major}.\${minor}.\${patch + 1}\`);
+            } else {
+              throw new Error(\`Unsupported version bump: \${bump}\`);
+            }
+          " "$CURRENT_VERSION" "${{ inputs.version_bump }}")
+          VERSION="$VERSION" node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const version = process.env.VERSION;
+            const packageFiles = ['package.json'];
+            for (const root of ['packages', 'examples']) {
+              if (!fs.existsSync(root)) continue;
+              for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+                if (!entry.isDirectory()) continue;
+                const file = path.join(root, entry.name, 'package.json');
+                if (fs.existsSync(file)) {
+                  packageFiles.push(file);
+                }
+              }
+            }
+            for (const file of packageFiles) {
+              const pkg = JSON.parse(fs.readFileSync(file, 'utf8'));
+              pkg.version = version;
               for (const dep of ['dependencies', 'devDependencies', 'peerDependencies']) {
                 if (!pkg[dep]) continue;
-                for (const [name, ver] of Object.entries(pkg[dep])) {
+                for (const name of Object.keys(pkg[dep])) {
                   if (name.startsWith('@risingwave/wavelet')) {
-                    pkg[dep][name] = '${{ env.VERSION }}';
+                    pkg[dep][name] = version;
                   }
                 }
               }
-              fs.writeFileSync('$pkg', JSON.stringify(pkg, null, 2) + '\n');
-            "
-          done
+              fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+            }
+          "
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Refresh lockfile
         run: npm install --package-lock-only
