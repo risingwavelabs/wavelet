@@ -32,7 +32,8 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepack": "npm run build"
   },
   "keywords": [
     "wavelet",

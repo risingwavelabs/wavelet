@@ -13,10 +13,14 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepack": "npm --prefix ../config run build && npm run build"
   },
   "dependencies": {
     "pg": "^8.13.0",

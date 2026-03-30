@@ -10,7 +10,8 @@
     "dev": "npm run dev --workspace=packages/server",
     "test": "vitest run",
     "lint": "eslint packages/ --ext .ts",
-    "typecheck": "tsc --build packages/*/tsconfig.json"
+    "typecheck": "tsc --build packages/*/tsconfig.json",
+    "pack:check": "node scripts/check-packages.mjs"
   },
   "engines": {
     "node": ">=20"
