@@ -29,6 +29,8 @@ jobs:
         with:
           node-version: 22
           registry-url: 'https://registry.npmjs.org'
+          scope: '@risingwave'
+          always-auth: true
           cache: 'npm'
 
       - name: Configure git
@@ -87,7 +89,13 @@ jobs:
           git push origin main --tags
 
       - name: Publish to npm
-        run: npm publish --workspaces --provenance --access public
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "NPM_TOKEN secret is not configured for this repository." >&2
+            exit 1
+          fi
+          npm whoami
+          npm publish --workspaces --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
