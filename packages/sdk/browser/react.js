@@ -21,21 +21,30 @@ export function useWavelet(queryName, options) {
     useEffect(() => {
         const client = getClient();
         let cancelled = false;
-        // Initial fetch
-        client.query(queryName).get(params).then((rows) => {
-            if (cancelled)
-                return;
-            dataRef.current = rows;
-            setData(rows);
-            setIsLoading(false);
-        }).catch((err) => {
-            if (cancelled)
-                return;
-            setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'));
-            setIsLoading(false);
-        });
+        const useSnapshotHydration = !params;
+        if (!useSnapshotHydration) {
+            client.query(queryName).get(params).then((rows) => {
+                if (cancelled)
+                    return;
+                dataRef.current = rows;
+                setData(rows);
+                setIsLoading(false);
+            }).catch((err) => {
+                if (cancelled)
+                    return;
+                setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'));
+                setIsLoading(false);
+            });
+        }
         // Subscribe to updates
         const unsub = client.query(queryName).subscribe({
+            onSnapshot: (snapshot) => {
+                if (cancelled || !useSnapshotHydration)
+                    return;
+                dataRef.current = snapshot.rows;
+                setData(snapshot.rows);
+                setIsLoading(false);
+            },
             onData: (diff) => {
                 if (cancelled)
                     return;
@@ -94,19 +103,30 @@ export function useWaveletDiff(queryName, options) {
     useEffect(() => {
         const client = getClient();
         let cancelled = false;
-        client.query(queryName).get(params).then((rows) => {
-            if (cancelled)
-                return;
-            dataRef.current = rows;
-            setData(rows);
-            setIsLoading(false);
-        }).catch((err) => {
-            if (cancelled)
-                return;
-            setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'));
-            setIsLoading(false);
-        });
+        const useSnapshotHydration = !params;
+        if (!useSnapshotHydration) {
+            client.query(queryName).get(params).then((rows) => {
+                if (cancelled)
+                    return;
+                dataRef.current = rows;
+                setData(rows);
+                setIsLoading(false);
+            }).catch((err) => {
+                if (cancelled)
+                    return;
+                setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'));
+                setIsLoading(false);
+            });
+        }
         const unsub = client.query(queryName).subscribe({
+            onSnapshot: (snapshot) => {
+                if (cancelled || !useSnapshotHydration)
+                    return;
+                dataRef.current = snapshot.rows;
+                setData(snapshot.rows);
+                setChanges(new Map());
+                setIsLoading(false);
+            },
             onData: (diff) => {
                 if (cancelled)
                     return;
