@@ -8,6 +8,8 @@ interface Subscriber {
   ws: WebSocket
   queryName: string
   claims: JwtClaims | null
+  ready: boolean
+  pendingDiffs: ViewDiff[]
 }
 
 export class WebSocketFanout {
@@ -80,7 +82,13 @@ export class WebSocketFanout {
       claims = await this.jwt.verify(token)
     }
 
-    const subscriber: Subscriber = { ws, queryName, claims }
+    const subscriber: Subscriber = {
+      ws,
+      queryName,
+      claims,
+      ready: false,
+      pendingDiffs: [],
+    }
 
     if (!this.subscribers.has(queryName)) {
       this.subscribers.set(queryName, new Set())
@@ -101,40 +109,84 @@ export class WebSocketFanout {
     ws.on('pong', () => { /* connection alive */ })
 
     ws.send(JSON.stringify({ type: 'connected', query: queryName }))
+
+    const bootstrap = await this.cursorManager.bootstrap(queryName)
+    const snapshotRows = this.filterSnapshotRows(queryName, bootstrap.snapshotRows, claims)
+    ws.send(JSON.stringify({
+      type: 'snapshot',
+      query: queryName,
+      rows: snapshotRows,
+    }))
+
+    for (const diff of bootstrap.diffs) {
+      const filteredDiff = this.filterDiffForSubscriber(queryName, diff, claims)
+      if (this.isEmptyDiff(filteredDiff)) continue
+      if (ws.readyState !== WebSocket.OPEN) break
+      ws.send(this.serializeDiffMessage(queryName, filteredDiff))
+    }
+
+    const handoffCursor = bootstrap.lastCursor
+    subscriber.ready = true
+    for (const diff of subscriber.pendingDiffs) {
+      if (ws.readyState !== WebSocket.OPEN) break
+      if (handoffCursor && this.compareCursor(diff.cursor, handoffCursor) <= 0) {
+        continue
+      }
+      ws.send(this.serializeDiffMessage(queryName, diff))
+    }
+    subscriber.pendingDiffs = []
   }
 
   broadcast(queryName: string, diff: ViewDiff): void {
     const subs = this.subscribers.get(queryName)
     if (!subs || subs.size === 0) return
 
-    const queryDef = this.queries[queryName]
-    const filterBy = this.getFilterBy(queryDef)
-
     for (const sub of subs) {
       if (sub.ws.readyState !== WebSocket.OPEN) continue
 
-      let filteredDiff = diff
-      if (filterBy && sub.claims) {
-        filteredDiff = this.filterDiff(diff, filterBy, sub.claims)
-      }
+      const filteredDiff = this.filterDiffForSubscriber(queryName, diff, sub.claims)
+      if (this.isEmptyDiff(filteredDiff)) continue
 
-      if (
-        filteredDiff.inserted.length === 0 &&
-        filteredDiff.updated.length === 0 &&
-        filteredDiff.deleted.length === 0
-      ) {
+      if (!sub.ready) {
+        sub.pendingDiffs.push(filteredDiff)
         continue
       }
 
-      sub.ws.send(JSON.stringify({
-        type: 'diff',
-        query: queryName,
-        cursor: filteredDiff.cursor,
-        inserted: filteredDiff.inserted,
-        updated: filteredDiff.updated,
-        deleted: filteredDiff.deleted,
-      }))
+      sub.ws.send(this.serializeDiffMessage(queryName, filteredDiff))
     }
+  }
+
+  private filterSnapshotRows(
+    queryName: string,
+    rows: Record<string, unknown>[],
+    claims: JwtClaims | null
+  ): Record<string, unknown>[] {
+    const queryDef = this.queries[queryName]
+    const filterBy = this.getFilterBy(queryDef)
+
+    if (filterBy && claims) {
+      const claimValue = claims[filterBy]
+      if (claimValue === undefined) return []
+
+      return rows.filter((row) => String(row[filterBy]) === String(claimValue))
+    }
+
+    return rows
+  }
+
+  private filterDiffForSubscriber(
+    queryName: string,
+    diff: ViewDiff,
+    claims: JwtClaims | null
+  ): ViewDiff {
+    const queryDef = this.queries[queryName]
+    const filterBy = this.getFilterBy(queryDef)
+
+    if (filterBy && claims) {
+      return this.filterDiff(diff, filterBy, claims)
+    }
+
+    return diff
   }
 
   private filterDiff(diff: ViewDiff, filterBy: string, claims: JwtClaims): ViewDiff {
@@ -158,6 +210,28 @@ export class WebSocketFanout {
   private getFilterBy(queryDef: QueryDef | SqlFragment): string | undefined {
     if ('_tag' in queryDef && queryDef._tag === 'sql') return undefined
     return (queryDef as QueryDef).filterBy
+  }
+
+  private isEmptyDiff(diff: ViewDiff): boolean {
+    return diff.inserted.length === 0 && diff.updated.length === 0 && diff.deleted.length === 0
+  }
+
+  private serializeDiffMessage(queryName: string, diff: ViewDiff): string {
+    return JSON.stringify({
+      type: 'diff',
+      query: queryName,
+      cursor: diff.cursor,
+      inserted: diff.inserted,
+      updated: diff.updated,
+      deleted: diff.deleted,
+    })
+  }
+
+  private compareCursor(left: string, right: string): number {
+    const leftValue = BigInt(left)
+    const rightValue = BigInt(right)
+    if (leftValue === rightValue) return 0
+    return leftValue < rightValue ? -1 : 1
   }
 
   closeAll(): void {

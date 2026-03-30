@@ -16,6 +16,12 @@ export interface ViewDiff {
   deleted: Record<string, unknown>[]
 }
 
+export interface BootstrapResult {
+  snapshotRows: Record<string, unknown>[]
+  diffs: ViewDiff[]
+  lastCursor: string | null
+}
+
 type DiffCallback = (queryName: string, diff: ViewDiff) => void
 
 /**
@@ -122,9 +128,12 @@ export class CursorManager {
           }
         }
 
-        const diff = this.parseDiffs(allRows)
+        const diffs = this.parseDiffBatches(allRows)
 
-        if (diff.inserted.length > 0 || diff.updated.length > 0 || diff.deleted.length > 0) {
+        for (const diff of diffs) {
+          if (diff.inserted.length === 0 && diff.updated.length === 0 && diff.deleted.length === 0) {
+            continue
+          }
           callback(queryName, diff)
         }
       } catch (err: any) {
@@ -173,6 +182,88 @@ export class CursorManager {
     return diff
   }
 
+  parseDiffBatches(rows: any[]): ViewDiff[] {
+    const diffs: ViewDiff[] = []
+    let currentRows: any[] = []
+    let currentCursor: string | null = null
+
+    for (const row of rows) {
+      const cursor = this.normalizeCursor(row.rw_timestamp)
+      if (!cursor) continue
+
+      if (currentCursor !== null && cursor !== currentCursor) {
+        diffs.push(this.parseDiffs(currentRows))
+        currentRows = []
+      }
+
+      currentCursor = cursor
+      currentRows.push(row)
+    }
+
+    if (currentRows.length > 0) {
+      diffs.push(this.parseDiffs(currentRows))
+    }
+
+    return diffs
+  }
+
+  async bootstrap(queryName: string): Promise<BootstrapResult> {
+    const subName = this.subscriptions.get(queryName)
+    if (!subName) {
+      throw new Error(
+        `Subscription for query '${queryName}' is not initialized. Start the server before accepting WebSocket clients.`
+      )
+    }
+
+    const conn = new Client({ connectionString: this.connectionString })
+    await conn.connect()
+
+    const cursorName = `wavelet_boot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+
+    try {
+      await conn.query(`DECLARE ${cursorName} SUBSCRIPTION CURSOR FOR ${subName} FULL`)
+
+      const snapshotRows: Record<string, unknown>[] = []
+      const incrementalRows: any[] = []
+      let readingSnapshot = true
+
+      while (readingSnapshot) {
+        const result = await conn.query(`FETCH 1000 FROM ${cursorName}`)
+        if (result.rows.length === 0) break
+
+        let firstIncrementalIndex = result.rows.findIndex((row) => this.normalizeCursor(row.rw_timestamp) !== null)
+        if (firstIncrementalIndex === -1) firstIncrementalIndex = result.rows.length
+
+        for (const row of result.rows.slice(0, firstIncrementalIndex)) {
+          snapshotRows.push(this.stripSubscriptionMetadata(row))
+        }
+
+        if (firstIncrementalIndex < result.rows.length) {
+          incrementalRows.push(...result.rows.slice(firstIncrementalIndex))
+          readingSnapshot = false
+        }
+      }
+
+      while (true) {
+        const result = await conn.query(`FETCH 1000 FROM ${cursorName}`)
+        if (result.rows.length === 0) break
+        incrementalRows.push(...result.rows)
+      }
+
+      const diffs = this.parseDiffBatches(incrementalRows)
+      const lastCursor = diffs.length > 0 ? diffs[diffs.length - 1].cursor : null
+
+      return { snapshotRows, diffs, lastCursor }
+    } finally {
+      try {
+        await conn.query(`CLOSE ${cursorName}`)
+      } catch {}
+      try {
+        await conn.end()
+      } catch {}
+    }
+  }
+
   async query(sql: string): Promise<any[]> {
     if (!this.client) throw new Error('Not connected')
     const result = await this.client.query(sql)
@@ -205,5 +296,16 @@ export class CursorManager {
       await this.client?.end()
     } catch {}
     this.client = null
+  }
+
+  private stripSubscriptionMetadata(row: Record<string, unknown>): Record<string, unknown> {
+    const { op: _op, rw_timestamp: _rwTimestamp, ...data } = row
+    return data
+  }
+
+  private normalizeCursor(value: unknown): string | null {
+    if (value === null || value === undefined) return null
+    const cursor = String(value).trim()
+    return cursor === '' ? null : cursor
   }
 }

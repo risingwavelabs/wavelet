@@ -104,7 +104,11 @@ export class WaveletClient {
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(typeof event.data === 'string' ? event.data : '')
-          if (msg.type === 'diff') {
+          if (msg.type === 'snapshot') {
+            handlers.onSnapshot?.({
+              rows: msg.rows ?? [],
+            })
+          } else if (msg.type === 'diff') {
             lastCursor = msg.cursor
             handlers.onData({
               cursor: msg.cursor,

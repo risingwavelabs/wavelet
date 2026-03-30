@@ -188,10 +188,12 @@ describe.runIf(process.env.WAVELET_INTEGRATION === '1')('Integration: Full Serve
   it('pushes diffs via WebSocket', async () => {
     const diff = await new Promise<any>((resolve, reject) => {
       const ws = new WebSocket(`ws://localhost:${port}/subscribe/${VIEW_NAME}`)
+      let sawSnapshot = false
 
       ws.on('message', (data: Buffer) => {
         const msg = JSON.parse(data.toString())
-        if (msg.type === 'connected') {
+        if (msg.type === 'snapshot') {
+          sawSnapshot = true
           // Write event to trigger diff
           fetch(`http://localhost:${port}/v1/events/${STREAM_NAME}`, {
             method: 'POST',
@@ -200,6 +202,7 @@ describe.runIf(process.env.WAVELET_INTEGRATION === '1')('Integration: Full Serve
           })
         }
         if (msg.type === 'diff') {
+          expect(sawSnapshot).toBe(true)
           ws.close()
           resolve(msg)
         }
@@ -213,5 +216,34 @@ describe.runIf(process.env.WAVELET_INTEGRATION === '1')('Integration: Full Serve
     expect(diff.cursor).toBeDefined()
     // Should have at least one insert or update
     expect(diff.inserted.length + diff.updated.length).toBeGreaterThan(0)
+  }, 20000)
+
+  it('pushes a snapshot immediately on connect', async () => {
+    await fetch(`http://localhost:${port}/v1/events/${STREAM_NAME}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: 'snapshot_user', value: 11 }),
+    })
+
+    await new Promise(r => setTimeout(r, 2000))
+
+    const snapshot = await new Promise<any>((resolve, reject) => {
+      const ws = new WebSocket(`ws://localhost:${port}/subscribe/${VIEW_NAME}`)
+
+      ws.on('message', (data: Buffer) => {
+        const msg = JSON.parse(data.toString())
+        if (msg.type === 'snapshot') {
+          ws.close()
+          resolve(msg)
+        }
+      })
+
+      ws.on('error', reject)
+      setTimeout(() => { ws.close(); reject(new Error('WebSocket snapshot timeout')) }, 15000)
+    })
+
+    expect(snapshot.type).toBe('snapshot')
+    expect(Array.isArray(snapshot.rows)).toBe(true)
+    expect(snapshot.rows.some((row: any) => row.user_id === 'snapshot_user')).toBe(true)
   }, 20000)
 })

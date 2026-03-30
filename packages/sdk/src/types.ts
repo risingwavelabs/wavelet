@@ -10,6 +10,10 @@ export interface Diff<T = Record<string, unknown>> {
   deleted: T[]
 }
 
+export interface Snapshot<T = Record<string, unknown>> {
+  rows: T[]
+}
+
 export interface QueryHandle<T = Record<string, unknown>> {
   get(params?: Record<string, string>): Promise<T[]>
   subscribe(handlers: SubscribeHandlers<T>): Unsubscribe
@@ -28,6 +32,7 @@ export type StreamHandle<T = Record<string, unknown>> = EventHandle<T>
 
 export interface SubscribeHandlers<T> {
   onOpen?: () => void
+  onSnapshot?: (snapshot: Snapshot<T>) => void
   onData: (diff: Diff<T>) => void
   onError?: (error: WaveletError) => void
   onReconnect?: () => void

@@ -44,21 +44,29 @@ export function useWavelet<T = Record<string, unknown>>(
   useEffect(() => {
     const client = getClient()
     let cancelled = false
+    const useSnapshotHydration = !params
 
-    // Initial fetch
-    client.query<T>(queryName).get(params).then((rows) => {
-      if (cancelled) return
-      dataRef.current = rows
-      setData(rows)
-      setIsLoading(false)
-    }).catch((err) => {
-      if (cancelled) return
-      setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'))
-      setIsLoading(false)
-    })
+    if (!useSnapshotHydration) {
+      client.query<T>(queryName).get(params).then((rows) => {
+        if (cancelled) return
+        dataRef.current = rows
+        setData(rows)
+        setIsLoading(false)
+      }).catch((err) => {
+        if (cancelled) return
+        setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'))
+        setIsLoading(false)
+      })
+    }
 
     // Subscribe to updates
     const unsub = client.query<T>(queryName).subscribe({
+      onSnapshot: (snapshot) => {
+        if (cancelled || !useSnapshotHydration) return
+        dataRef.current = snapshot.rows
+        setData(snapshot.rows)
+        setIsLoading(false)
+      },
       onData: (diff: Diff<T>) => {
         if (cancelled) return
 
@@ -144,19 +152,29 @@ export function useWaveletDiff<T = Record<string, unknown>>(
   useEffect(() => {
     const client = getClient()
     let cancelled = false
+    const useSnapshotHydration = !params
 
-    client.query<T>(queryName).get(params).then((rows) => {
-      if (cancelled) return
-      dataRef.current = rows
-      setData(rows)
-      setIsLoading(false)
-    }).catch((err) => {
-      if (cancelled) return
-      setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'))
-      setIsLoading(false)
-    })
+    if (!useSnapshotHydration) {
+      client.query<T>(queryName).get(params).then((rows) => {
+        if (cancelled) return
+        dataRef.current = rows
+        setData(rows)
+        setIsLoading(false)
+      }).catch((err) => {
+        if (cancelled) return
+        setError(err instanceof WaveletError ? err : new WaveletError(err.message, 'SERVER_ERROR'))
+        setIsLoading(false)
+      })
+    }
 
     const unsub = client.query<T>(queryName).subscribe({
+      onSnapshot: (snapshot) => {
+        if (cancelled || !useSnapshotHydration) return
+        dataRef.current = snapshot.rows
+        setData(snapshot.rows)
+        setChanges(new Map())
+        setIsLoading(false)
+      },
       onData: (diff: Diff<T>) => {
         if (cancelled) return
         applyDiff(diff)

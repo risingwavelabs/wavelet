@@ -156,6 +156,96 @@ describe('WaveletClient', () => {
     })
   })
 
+  describe('query().subscribe()', () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+
+      url: string
+      onopen: (() => void) | null = null
+      onmessage: ((event: { data: string }) => void) | null = null
+      onclose: ((event: { code: number, reason: string }) => void) | null = null
+      onerror: (() => void) | null = null
+
+      constructor(url: string) {
+        this.url = url
+        MockWebSocket.instances.push(this)
+      }
+
+      emitOpen() {
+        this.onopen?.()
+      }
+
+      emitMessage(message: unknown) {
+        this.onmessage?.({ data: JSON.stringify(message) })
+      }
+
+      close(code = 1000, reason = '') {
+        this.onclose?.({ code, reason })
+      }
+    }
+
+    beforeEach(() => {
+      MockWebSocket.instances = []
+      vi.stubGlobal('WebSocket', MockWebSocket as any)
+    })
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+    })
+
+    it('delivers snapshot frames to onSnapshot', () => {
+      const client = new WaveletClient({ url: 'http://localhost:8080' })
+      const onSnapshot = vi.fn()
+      const onData = vi.fn()
+
+      client.query('leaderboard').subscribe({
+        onSnapshot,
+        onData,
+      })
+
+      const ws = MockWebSocket.instances[0]
+      ws.emitOpen()
+      ws.emitMessage({
+        type: 'snapshot',
+        query: 'leaderboard',
+        rows: [{ player_id: 'alice', score: 42 }],
+      })
+
+      expect(onSnapshot).toHaveBeenCalledWith({
+        rows: [{ player_id: 'alice', score: 42 }],
+      })
+      expect(onData).not.toHaveBeenCalled()
+    })
+
+    it('keeps diff delivery unchanged', () => {
+      const client = new WaveletClient({ url: 'http://localhost:8080' })
+      const onData = vi.fn()
+
+      client.query('leaderboard').subscribe({
+        onData,
+      })
+
+      const ws = MockWebSocket.instances[0]
+      ws.emitOpen()
+      ws.emitMessage({
+        type: 'diff',
+        query: 'leaderboard',
+        cursor: '123',
+        inserted: [{ player_id: 'alice', score: 42 }],
+        updated: [],
+        deleted: [],
+      })
+
+      expect(onData).toHaveBeenCalledWith({
+        cursor: '123',
+        inserted: [{ player_id: 'alice', score: 42 }],
+        updated: [],
+        deleted: [],
+      })
+    })
+  })
+
   describe('event().emit()', () => {
     let fetchSpy: ReturnType<typeof vi.fn>
 
